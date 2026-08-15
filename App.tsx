@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  Platform,
   useWindowDimensions,
 } from "react-native";
 import {
@@ -41,7 +42,9 @@ type Tab = "towatch" | "watched";
 
 export default function App() {
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
+  const isTablet = width >= 640 && width < 1024;
+  const isDesktop = width >= 1024;
+  const numColumns = isDesktop ? 3 : isTablet ? 2 : 1;
 
   const [tab, setTab] = useState<Tab>("towatch");
   const [movies, setMovies] = useState<WatchlistMovie[]>([]);
@@ -61,6 +64,8 @@ export default function App() {
   const [userRating, setUserRating] = useState<number>(5);
   const [detailMovie, setDetailMovie] = useState<WatchlistMovie | SearchResult | null>(null);
   const [genreModalOpen, setGenreModalOpen] = useState(false);
+  const [detailExtraLoading, setDetailExtraLoading] = useState(false);
+
   const [detailExtra, setDetailExtra] = useState<{
     overview?: string | null;
     tagline?: string;
@@ -148,10 +153,11 @@ export default function App() {
   useEffect(() => {
     if (!detailMovie?.tmdb_id) {
       setDetailExtra(null);
+      setDetailExtraLoading(false);
       return;
     }
 
-    const tmdbKey = "9869c47c4b6c6a4990c1c71057aaaf5a";
+    const tmdbKey = process.env.EXPO_PUBLIC_TMDB_API_KEY || "9869c47c4b6c6a4990c1c71057aaaf5a";
     const primaryType = detailMovie.media_type === "tv" ? "tv" : "movie";
     const secondaryType = primaryType === "tv" ? "movie" : "tv";
 
@@ -164,6 +170,7 @@ export default function App() {
     }
 
     (async () => {
+      setDetailExtraLoading(true);
       try {
         let data = await fetchTmdbDetail(primaryType);
         if (!data || (!data.overview && !data.backdrop_path)) {
@@ -214,6 +221,8 @@ export default function App() {
         });
       } catch (e) {
         console.error("Detail fetch error:", e);
+      } finally {
+        setDetailExtraLoading(false);
       }
     })();
   }, [detailMovie]);
@@ -275,11 +284,19 @@ export default function App() {
   }
 
   async function handleDelete(id: string) {
+    // Optimistically update local state for 0ms instant UI removal
+    setMovies((prev) => prev.filter((m) => m.id !== id));
+    setWatched((prev) => prev.filter((m) => m.id !== id));
+
     try {
       const { error } = await supabase.from("watchlist").delete().eq("id", id);
-      if (!error) fetchAll();
+      if (error) {
+        console.error("Delete error:", error);
+        fetchAll();
+      }
     } catch (e) {
-      console.error(e);
+      console.error("Delete exception:", e);
+      fetchAll();
     }
   }
 
@@ -322,8 +339,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#09090b" />
 
-      {/* Main Responsive Content Area */}
-      <View style={[styles.mainWrapper, { maxWidth: isDesktop ? 860 : "100%" }]}>
+      <View style={styles.appWrapper}>
         {/* Header Bar */}
         <View style={styles.header}>
           <View style={styles.headerTitleRow}>
@@ -352,7 +368,10 @@ export default function App() {
             <View style={[styles.searchInputRow, { flex: 1 }]}>
               <Search size={16} color="#71717a" style={styles.searchIcon} />
               <TextInput
-                style={styles.searchInput}
+                style={[
+                  styles.searchInput,
+                  Platform.OS === "web" && ({ outlineStyle: "none" } as any),
+                ]}
                 placeholder="Search movies or TV series..."
                 placeholderTextColor="#71717a"
                 value={query}
@@ -436,7 +455,7 @@ export default function App() {
               ) : searchResults.length === 0 ? (
                 <Text style={styles.noResultsText}>No titles found</Text>
               ) : (
-                <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
                   {searchResults.map((item) => {
                     const poster = getPosterUrl(item.poster_path);
                     const isAdded = existingTmdbIds.has(item.tmdb_id);
@@ -483,29 +502,40 @@ export default function App() {
           )}
         </View>
 
-        {/* Main Movie List with Responsive Grid Layout */}
+        {/* Main Movie List with Responsive Grid */}
         {loading ? (
           <ActivityIndicator size="large" color="#f59e0b" style={{ flex: 1 }} />
         ) : (
           <FlatList
-            key={isDesktop ? 2 : 1}
-            numColumns={isDesktop ? 2 : 1}
+            key={numColumns}
+            numColumns={numColumns}
             showsVerticalScrollIndicator={false}
             data={tab === "towatch" ? displayMovies : displayWatched}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, gap: 12 }}
-            columnWrapperStyle={isDesktop ? { gap: 12 } : undefined}
+            ListEmptyComponent={
+              <View style={{ paddingVertical: 48, alignItems: "center", justifyContent: "center" }}>
+                <Film size={40} color="#3f3f46" style={{ marginBottom: 12 }} />
+                <Text style={{ color: "#a1a1aa", fontSize: 14, fontWeight: "600", textAlign: "center" }}>
+                  {selectedGenre || selectedPlatform
+                    ? "No titles match your active filters."
+                    : tab === "towatch"
+                    ? "Your watchlist is empty. Search above to add movies & series!"
+                    : "No watched titles yet."}
+                </Text>
+              </View>
+            }
             renderItem={({ item }) => {
               const poster = getPosterUrl(item.poster_path);
               const isTv = item.media_type === "tv";
               return (
                 <TouchableOpacity
                   onPress={() => setDetailMovie(item)}
-                  style={[styles.card, isDesktop && { flex: 1 }]}
+                  style={[styles.card, numColumns > 1 && { flex: 1, marginHorizontal: 4 }]}
                   activeOpacity={0.8}
                 >
                   <Image source={{ uri: poster || "https://via.placeholder.com/100" }} style={styles.cardPoster} />
-                  <View style={{ flex: 1, justifyContent: "space-between" }}>
+                  <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
@@ -514,7 +544,15 @@ export default function App() {
                           {item.release_year && <Text style={styles.cardYear}>{item.release_year}</Text>}
                         </View>
                       </View>
-                      <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDelete(item.id);
+                        }}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        style={{ padding: 4 }}
+                        activeOpacity={0.6}
+                      >
                         <Trash2 size={16} color="#71717a" />
                       </TouchableOpacity>
                     </View>
@@ -557,37 +595,37 @@ export default function App() {
             }}
           />
         )}
-      </View>
 
-      {/* Floating Bottom Nav */}
-      <View style={styles.floatingNavContainer}>
-        <View style={styles.floatingNav}>
-          <TouchableOpacity
-            onPress={() => setTab("towatch")}
-            style={[styles.navTab, tab === "towatch" && styles.activeNavTab]}
-          >
-            <Film size={16} color={tab === "towatch" ? "#09090b" : "#a1a1aa"} />
-            <Text style={[styles.navTabText, tab === "towatch" && styles.activeNavTabText]}>To Watch</Text>
-          </TouchableOpacity>
+        {/* Floating Bottom Nav */}
+        <View style={styles.floatingNavContainer}>
+          <View style={styles.floatingNav}>
+            <TouchableOpacity
+              onPress={() => setTab("towatch")}
+              style={[styles.navTab, tab === "towatch" && styles.activeNavTab]}
+            >
+              <Film size={16} color={tab === "towatch" ? "#09090b" : "#a1a1aa"} />
+              <Text style={[styles.navTabText, tab === "towatch" && styles.activeNavTabText]}>To Watch</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => setTab("watched")}
-            style={[styles.navTab, tab === "watched" && styles.activeNavTab]}
-          >
-            <CheckCircle2 size={16} color={tab === "watched" ? "#09090b" : "#a1a1aa"} />
-            <Text style={[styles.navTabText, tab === "watched" && styles.activeNavTabText]}>Watched</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setTab("watched")}
+              style={[styles.navTab, tab === "watched" && styles.activeNavTab]}
+            >
+              <CheckCircle2 size={16} color={tab === "watched" ? "#09090b" : "#a1a1aa"} />
+              <Text style={[styles.navTabText, tab === "watched" && styles.activeNavTabText]}>Watched</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       {/* Mark Watched Modal */}
       <Modal visible={Boolean(watchedModalMovie)} transparent animationType="slide">
         <TouchableOpacity
-          style={[styles.modalOverlay, isDesktop && { justifyContent: "center" }]}
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setWatchedModalMovie(null)}
         >
-          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, isDesktop && styles.desktopModalContent]}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
             <View style={styles.dragHandle} />
             <Text style={styles.modalTitle}>Rate & Mark Watched</Text>
             <Text style={styles.modalSub}>{watchedModalMovie?.title}</Text>
@@ -612,13 +650,13 @@ export default function App() {
       </Modal>
 
       {/* Movie Details Modal */}
-      <Modal visible={Boolean(detailMovie)} transparent animationType="slide">
+      <Modal visible={Boolean(detailMovie)} transparent animationType="fade">
         <TouchableOpacity
-          style={[styles.modalOverlay, isDesktop && { justifyContent: "center" }]}
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setDetailMovie(null)}
         >
-          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, isDesktop && styles.desktopModalContent, { maxHeight: "88%", paddingHorizontal: 0, paddingTop: 10 }]}>
+          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { maxHeight: "88%", paddingHorizontal: 0, paddingTop: 10 }]}>
             <View style={styles.dragHandle} />
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}>
@@ -655,7 +693,7 @@ export default function App() {
                     {detailExtra?.voteAverage && detailExtra.voteAverage > 0 && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 }}>
                         <Star size={13} color="#f59e0b" fill="#f59e0b" />
-                        <Text style={{ fontSize: 12, fontWeight: "bold", color: "#fbbf24" }}>
+                        <Text style={{ fontSize: 12, fontWeight: "bold", color: "#f59e0b" }}>
                           {detailExtra.voteAverage} / 10
                         </Text>
                         {detailExtra.voteCount && (
@@ -678,7 +716,7 @@ export default function App() {
 
               {/* Tagline */}
               {detailExtra?.tagline && (
-                <Text style={{ color: "#fbbf24", fontStyle: "italic", fontSize: 12, marginBottom: 12 }}>
+                <Text style={{ color: "#f59e0b", fontStyle: "italic", fontSize: 12, marginBottom: 12 }}>
                   "{detailExtra.tagline}"
                 </Text>
               )}
@@ -743,12 +781,12 @@ export default function App() {
               {/* Stream On / OTT Platforms */}
               {detailMovie && (detailMovie.platforms || []).length > 0 && (
                 <View style={{ marginBottom: 16 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "bold", color: "#fbbf24", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "bold", color: "#f59e0b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
                     Stream On
                   </Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
                     {detailMovie.platforms.map((p) => (
-                      <Text key={p} style={{ color: "#fbbf24", fontSize: 11, fontWeight: "600", backgroundColor: "rgba(245,158,11,0.15)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                      <Text key={p} style={{ color: "#f59e0b", fontSize: 11, fontWeight: "600", backgroundColor: "rgba(245,158,11,0.15)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
                         📺 {p}
                       </Text>
                     ))}
@@ -774,11 +812,11 @@ export default function App() {
       {/* Genre Dropdown Picker Modal */}
       <Modal visible={genreModalOpen} transparent animationType="slide">
         <TouchableOpacity
-          style={[styles.modalOverlay, isDesktop && { justifyContent: "center" }]}
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setGenreModalOpen(false)}
         >
-          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, isDesktop && styles.desktopModalContent, { maxHeight: "75%" }]}>
+          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { maxHeight: "75%" }]}>
             <View style={styles.dragHandle} />
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <Text style={styles.modalTitle}>Filter by Genre</Text>
@@ -818,8 +856,8 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#09090b" },
-  mainWrapper: { flex: 1, alignSelf: "center", width: "100%" },
+  container: { flex: 1, backgroundColor: "#09090b", alignItems: "center" },
+  appWrapper: { flex: 1, width: "100%", maxWidth: 1000, alignSelf: "center" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -858,9 +896,16 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#27272a",
   },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, color: "#f4f4f5", fontSize: 14 },
+  searchInput: {
+    flex: 1,
+    color: "#f4f4f5",
+    fontSize: 14,
+    paddingVertical: 0,
+  },
   searchDropdown: {
     position: "absolute",
     top: 54,
@@ -1001,15 +1046,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   actionButtonText: { color: "#09090b", fontSize: 12, fontWeight: "600" },
-  floatingNavContainer: {
-    position: "absolute",
-    bottom: 24,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 100,
-  },
+  floatingNavContainer: { position: "absolute", bottom: 24, left: 24, right: 24, alignItems: "center" },
   floatingNav: {
     flexDirection: "row",
     backgroundColor: "rgba(24,24,27,0.95)",
@@ -1017,14 +1054,14 @@ const styles = StyleSheet.create({
     padding: 6,
     borderWidth: 1,
     borderColor: "#27272a",
-    width: "90%",
-    maxWidth: 340,
+    width: "100%",
+    maxWidth: 450,
   },
   navTab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 14, gap: 6 },
   activeNavTab: { backgroundColor: "#f4f4f5" },
   navTabText: { color: "#a1a1aa", fontSize: 13, fontWeight: "500" },
   activeNavTabText: { color: "#09090b", fontWeight: "bold" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end", padding: 0 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end", alignItems: "center", padding: 0 },
   modalContent: {
     backgroundColor: "#18181b",
     borderTopLeftRadius: 28,
@@ -1037,12 +1074,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#27272a",
     width: "100%",
-  },
-  desktopModalContent: {
-    borderRadius: 24,
-    maxWidth: 560,
-    alignSelf: "center",
-    width: "90%",
+    maxWidth: 600,
   },
   dragHandle: {
     width: 36,

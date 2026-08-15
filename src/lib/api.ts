@@ -62,8 +62,7 @@ export function filterPopularPlatforms(rawPlatforms: string[]): string[] {
 }
 
 export async function searchMovies(query: string): Promise<SearchResult[]> {
-  // Use TMDB API key from configuration
-  const tmdbKey = "9869c47c4b6c6a4990c1c71057aaaf5a";
+  const tmdbKey = process.env.EXPO_PUBLIC_TMDB_API_KEY || "9869c47c4b6c6a4990c1c71057aaaf5a";
 
   const searchRes = await fetch(
     `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`

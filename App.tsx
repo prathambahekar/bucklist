@@ -230,29 +230,43 @@ export default function App() {
   async function handleAdd(item: SearchResult) {
     setAddingId(item.tmdb_id);
     try {
-      const { error } = await supabase.from("watchlist").insert({
+      const { error } = await supabase.from("watchlist").insert([{
         tmdb_id: item.tmdb_id,
         title: item.title,
         poster_path: item.poster_path,
         release_year: item.release_year,
-        media_type: item.media_type || "movie",
         genres: item.genres || [],
         platforms: item.platforms || [],
-      });
+        watched: false,
+      }]);
       if (error) {
+        console.error("Supabase insert error:", error);
         if (error.code === "23505") {
-          Alert.alert("Already Added", `"${item.title}" is already in your watchlist.`);
+          if (Platform.OS === "web") {
+            alert(`"${item.title}" is already in your watchlist.`);
+          } else {
+            Alert.alert("Already Added", `"${item.title}" is already in your watchlist.`);
+          }
         } else {
-          Alert.alert("Error", error.message);
+          if (Platform.OS === "web") {
+            alert(`Failed to add: ${error.message}`);
+          } else {
+            Alert.alert("Error", error.message);
+          }
         }
       } else {
-        fetchAll();
+        await fetchAll();
         setSearchOpen(false);
         setQuery("");
       }
     } catch (e: unknown) {
+      console.error(e);
       const msg = e && typeof e === "object" && "message" in e ? String((e as { message: string }).message) : "Failed to add title";
-      Alert.alert("Error", msg);
+      if (Platform.OS === "web") {
+        alert(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
     } finally {
       setAddingId(null);
     }
@@ -1088,5 +1102,5 @@ const styles = StyleSheet.create({
   modalSub: { fontSize: 14, color: "#a1a1aa", marginTop: 4 },
   modalSaveButton: { backgroundColor: "#f4f4f5", paddingVertical: 12, borderRadius: 12, alignItems: "center" },
   modalSaveText: { color: "#09090b", fontWeight: "bold" },
-  trailerButton: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14, backgroundColor: "rgba(239,68,68,0.15)", padding: 10, borderRadius: 10 },
+  trailerButton: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14, backgroundColor: "rgba(239, 68, 68, 0.15)", padding: 10, borderRadius: 10 },
 });

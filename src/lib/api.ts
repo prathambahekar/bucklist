@@ -24,44 +24,6 @@ export interface SearchResult {
   platforms: string[];
 }
 
-export async function searchMovies(query: string): Promise<SearchResult[]> {
-  const tmdbApiKey = import.meta.env.VITE_TMDB_API_KEY;
-
-  // Try Supabase Edge Function first
-  const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-  if (baseUrl) {
-    const apiKey =
-      import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-      import.meta.env.VITE_SUPABASE_ANON_KEY ||
-      "";
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    };
-
-    try {
-      const url = `${baseUrl}/functions/v1/tmdb-search?query=${encodeURIComponent(query)}`;
-      const res = await fetch(url, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        if (!data.error && data.results) {
-          return data.results;
-        }
-      }
-    } catch {
-      // Fall back to direct TMDB API call if configured
-    }
-  }
-
-  // Fallback: Direct TMDB fetch if VITE_TMDB_API_KEY is set in .env
-  if (tmdbApiKey) {
-    return searchTmdbDirect(query, tmdbApiKey);
-  }
-
-  throw new Error("TMDB API key is not configured. Set VITE_TMDB_API_KEY in .env or deploy the Supabase edge function.");
-}
-
 const POPULAR_OTT_RULES: Array<{ match: string; name: string }> = [
   { match: "netflix", name: "Netflix" },
   { match: "prime video", name: "Prime Video" },
@@ -99,7 +61,10 @@ export function filterPopularPlatforms(rawPlatforms: string[]): string[] {
   return Array.from(result);
 }
 
-async function searchTmdbDirect(query: string, tmdbKey: string): Promise<SearchResult[]> {
+export async function searchMovies(query: string): Promise<SearchResult[]> {
+  // Use TMDB API key from configuration
+  const tmdbKey = "9869c47c4b6c6a4990c1c71057aaaf5a";
+
   const searchRes = await fetch(
     `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`
   );
@@ -119,15 +84,11 @@ async function searchTmdbDirect(query: string, tmdbKey: string): Promise<SearchR
   const genreMap = new Map<number, string>();
   if (movieGenresRes.ok) {
     const gData = await movieGenresRes.json();
-    for (const g of gData.genres || []) {
-      genreMap.set(g.id, g.name);
-    }
+    for (const g of gData.genres || []) genreMap.set(g.id, g.name);
   }
   if (tvGenresRes.ok) {
     const gData = await tvGenresRes.json();
-    for (const g of gData.genres || []) {
-      genreMap.set(g.id, g.name);
-    }
+    for (const g of gData.genres || []) genreMap.set(g.id, g.name);
   }
 
   return Promise.all(
@@ -157,7 +118,6 @@ async function searchTmdbDirect(query: string, tmdbKey: string): Promise<SearchR
             const regions = provData.results || {};
             const platformSet = new Set<string>();
 
-            // Check IN, US, GB, CA regions for subscription/flatrate providers
             for (const regionCode of ["IN", "US", "GB", "CA"]) {
               const region = regions[regionCode];
               if (region?.flatrate) {
@@ -167,7 +127,6 @@ async function searchTmdbDirect(query: string, tmdbKey: string): Promise<SearchR
               }
             }
 
-            // Fallback to first available region if no flatrate found in key regions
             if (platformSet.size === 0) {
               const firstRegion = Object.values(regions)[0] as
                 | { flatrate?: { provider_name: string }[] }
@@ -182,7 +141,7 @@ async function searchTmdbDirect(query: string, tmdbKey: string): Promise<SearchR
             rawPlatforms = Array.from(platformSet);
           }
         } catch {
-          // Providers are optional
+          // Optional
         }
 
         return {

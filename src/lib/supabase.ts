@@ -1,14 +1,9 @@
+import "react-native-url-polyfill/auto";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  "placeholder-key";
+export const supabaseUrl = "https://tnbadlzvyobczssypusz.supabase.co";
+export const supabaseAnonKey = "sb_publishable__J8sJ67EIwcrQ1YKJkHLow_weIhS4OM";
 
-export const isSupabaseConfigured = Boolean(
-  import.meta.env.VITE_SUPABASE_URL &&
-    (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY)
-);
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

@@ -239,26 +239,22 @@ export function createBackupPayload(): BucklistBackupData {
   };
 }
 
-export function downloadBackupFile(customName?: string): boolean {
-  try {
-    const data = createBackupPayload();
-    const jsonStr = JSON.stringify(data, null, 2);
-    const dateStr = new Date().toISOString().split("T")[0];
-    const filename = customName || `bucklist-backup-${dateStr}.json`;
+export function downloadBackupToStorage(customName?: string): { success: boolean; filename: string } {
+  const data = createBackupPayload();
+  const jsonStr = JSON.stringify(data, null, 2);
+  const dateStr = new Date().toISOString().split("T")[0];
+  const filename = customName || `bucklist-backup-${dateStr}.json`;
 
+  try {
     const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
-    link.setAttribute("download", filename);
-    link.rel = "noopener";
-    link.style.display = "none";
+    link.target = "_self";
     document.body.appendChild(link);
     link.click();
 
-    // Defer revocation so mobile browsers have time to read the stream
     setTimeout(() => {
       try {
         if (link.parentNode) {
@@ -270,19 +266,14 @@ export function downloadBackupFile(customName?: string): boolean {
       }
     }, 60000);
 
-    return true;
+    return { success: true, filename };
   } catch (err) {
     console.error("Backup download error:", err);
     try {
-      const data = createBackupPayload();
-      const jsonStr = JSON.stringify(data, null, 2);
-      const dateStr = new Date().toISOString().split("T")[0];
-      const filename = customName || `bucklist-backup-${dateStr}.json`;
       const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(jsonStr);
       const link = document.createElement("a");
       link.href = dataUri;
       link.download = filename;
-      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       setTimeout(() => {
@@ -290,11 +281,63 @@ export function downloadBackupFile(customName?: string): boolean {
           document.body.removeChild(link);
         }
       }, 10000);
-      return true;
+      return { success: true, filename };
     } catch {
-      return false;
+      return { success: false, filename };
     }
   }
+}
+
+export async function shareBackupToApps(customName?: string): Promise<{ success: boolean; error?: string; filename: string }> {
+  const data = createBackupPayload();
+  const jsonStr = JSON.stringify(data, null, 2);
+  const dateStr = new Date().toISOString().split("T")[0];
+  const filename = customName || `bucklist-backup-${dateStr}.json`;
+
+  const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
+
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof File !== "undefined") {
+    try {
+      const file = new File([blob], filename, { type: "application/json" });
+      if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "Bucklist Backup",
+          text: `Bucklist watchlist backup (${dateStr})`,
+        });
+        return { success: true, filename };
+      }
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        return { success: true, filename };
+      }
+      console.warn("navigator.share with file failed", err);
+    }
+
+    try {
+      await navigator.share({
+        title: "Bucklist Backup",
+        text: jsonStr,
+      });
+      return { success: true, filename };
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        return { success: true, filename };
+      }
+    }
+  }
+
+  const res = downloadBackupToStorage(customName);
+  return { success: res.success, filename: res.filename, error: res.success ? undefined : "Sharing is not supported on this browser." };
+}
+
+export async function exportBackupFile(customName?: string): Promise<{ success: boolean; method: "shared" | "downloaded" | "failed"; filename: string }> {
+  const res = downloadBackupToStorage(customName);
+  return { success: res.success, method: res.success ? "downloaded" : "failed", filename: res.filename };
+}
+
+export function downloadBackupFile(customName?: string): boolean {
+  return downloadBackupToStorage(customName).success;
 }
 
 function sanitizeMovieItem(item: any): WatchlistMovie | null {

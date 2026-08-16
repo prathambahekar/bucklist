@@ -10,11 +10,13 @@ import {
   AlertTriangle,
   Database,
   X,
+  Send,
   ChevronRight,
   BarChart3,
 } from "lucide-react";
 import {
-  downloadBackupFile,
+  downloadBackupToStorage,
+  shareBackupToApps,
   validateAndParseBackupJson,
   applyImportedBackup,
   resetAllLocalData,
@@ -44,6 +46,9 @@ export function SettingsView({
   // Reset confirmation modal state
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
 
+  // Export Drawer state
+  const [showExportDrawer, setShowExportDrawer] = useState(false);
+
   // Notifications
   const [exportNotification, setExportNotification] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
@@ -56,14 +61,36 @@ export function SettingsView({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleQuickExport = () => {
-    const success = downloadBackupFile();
-    if (success) {
-      setExportNotification("Watchlist backup saved to your Downloads folder.");
+  const handleExportClick = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 640) {
+      setShowExportDrawer(true);
+    } else {
+      handleExportToStorage();
+    }
+  };
+
+  const handleExportToStorage = () => {
+    setShowExportDrawer(false);
+    const result = downloadBackupToStorage();
+    if (result.success) {
+      setExportNotification(`Saved ${result.filename} to Downloads.`);
     } else {
       setExportNotification("Failed to trigger backup download.");
     }
-    setTimeout(() => setExportNotification(null), 4000);
+    setTimeout(() => setExportNotification(null), 4500);
+  };
+
+  const handleShareToApps = async () => {
+    setShowExportDrawer(false);
+    try {
+      const result = await shareBackupToApps();
+      if (result.success) {
+        setExportNotification(`Backup file shared (${result.filename}).`);
+      }
+    } catch {
+      // ignore
+    }
+    setTimeout(() => setExportNotification(null), 4500);
   };
 
   const handleTriggerImport = () => {
@@ -258,7 +285,7 @@ export function SettingsView({
               <button
                 id="settings-card-export-btn"
                 type="button"
-                onClick={handleQuickExport}
+                onClick={handleExportClick}
                 className="rounded-2xl p-3.5 sm:p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 border min-h-[92px] active:scale-[0.98] bg-zinc-950/60 hover:bg-zinc-850 border-zinc-800/80 hover:border-amber-500/50 group"
               >
                 <Download className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
@@ -266,7 +293,7 @@ export function SettingsView({
                   Export
                 </span>
                 <span className="text-[10px] text-zinc-400 mt-0.5 leading-tight">
-                  Download .json backup
+                  Save or share backup
                 </span>
               </button>
 
@@ -385,6 +412,94 @@ export function SettingsView({
                 <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-red-400 group-hover:translate-x-0.5 transition-all" />
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Options Bottom Drawer Modal */}
+      {showExportDrawer && (
+        <div
+          id="export-drawer-backdrop"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+          onClick={() => setShowExportDrawer(false)}
+        >
+          <div
+            id="export-drawer-content"
+            className="w-full max-w-md bg-[#18181b] border-t sm:border border-zinc-800 rounded-t-[2rem] sm:rounded-3xl p-5 sm:p-6 space-y-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drawer Drag Pill (Mobile) */}
+            <div className="w-12 h-1.5 bg-zinc-700/60 rounded-full mx-auto -mt-2 mb-2 sm:hidden" />
+
+            {/* Drawer Header */}
+            <div className="flex items-center gap-3.5 px-1">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-800/60 flex items-center justify-center text-amber-500 shrink-0">
+                <Download className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-bold text-zinc-100 leading-tight">Export Backup</h3>
+                <p className="text-[13px] text-zinc-400 mt-1">Save or share your backup file</p>
+              </div>
+            </div>
+
+            {/* Options List */}
+            <div className="space-y-3 pt-1">
+              {/* Option 1: Export to Storage */}
+              <button
+                id="export-to-storage-option-btn"
+                type="button"
+                onClick={handleExportToStorage}
+                className="w-full flex items-center justify-between p-4 rounded-3xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-all text-left group cursor-pointer active:scale-[0.98]"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 group-hover:text-indigo-300 shrink-0">
+                    <Download className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[15px] font-bold text-zinc-100 group-hover:text-white truncate">
+                      Export to Storage
+                    </span>
+                    <span className="block text-[12px] text-zinc-400 truncate mt-0.5">
+                      Save file directly to Downloads folder
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0 ml-2" />
+              </button>
+
+              {/* Option 2: Share to Apps */}
+              <button
+                id="share-to-apps-option-btn"
+                type="button"
+                onClick={handleShareToApps}
+                className="w-full flex items-center justify-between p-4 rounded-3xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-all text-left group cursor-pointer active:scale-[0.98]"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:text-emerald-300 shrink-0">
+                    <Send className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[15px] font-bold text-zinc-100 group-hover:text-white truncate">
+                      Share to Apps
+                    </span>
+                    <span className="block text-[12px] text-zinc-400 truncate mt-0.5">
+                      Send via WhatsApp, Telegram, Drive, Email
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0 ml-2" />
+              </button>
+            </div>
+
+            {/* Cancel Button */}
+            <button
+              id="export-drawer-cancel-btn"
+              type="button"
+              onClick={() => setShowExportDrawer(false)}
+              className="w-full py-3.5 px-4 rounded-3xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-200 hover:text-white font-bold text-[14px] transition-colors cursor-pointer text-center active:scale-[0.98]"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

@@ -75,7 +75,7 @@ export function SettingsView({
     if (result.success) {
       setExportNotification(`Saved ${result.filename} to Downloads.`);
     } else {
-      setExportNotification("Failed to trigger backup download.");
+      setExportNotification(result.error || "Failed to trigger backup download.");
     }
     setTimeout(() => setExportNotification(null), 4500);
   };
@@ -86,9 +86,11 @@ export function SettingsView({
       const result = await shareBackupToApps();
       if (result.success) {
         setExportNotification(`Backup file shared (${result.filename}).`);
+      } else if (result.error) {
+        setExportNotification(result.error);
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setExportNotification("Sharing failed.");
     }
     setTimeout(() => setExportNotification(null), 4500);
   };

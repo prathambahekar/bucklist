@@ -239,7 +239,7 @@ export function createBackupPayload(): BucklistBackupData {
   };
 }
 
-export function downloadBackupToStorage(customName?: string): { success: boolean; filename: string } {
+export function downloadBackupToStorage(customName?: string): { success: boolean; filename: string; error?: string } {
   const data = createBackupPayload();
   const jsonStr = JSON.stringify(data, null, 2);
   const dateStr = new Date().toISOString().split("T")[0];
@@ -251,7 +251,7 @@ export function downloadBackupToStorage(customName?: string): { success: boolean
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
-    link.target = "_self";
+    link.style.display = "none"; // Required for some browsers
     document.body.appendChild(link);
     link.click();
 
@@ -264,26 +264,28 @@ export function downloadBackupToStorage(customName?: string): { success: boolean
       } catch {
         // ignore
       }
-    }, 60000);
+    }, 5000); // 5 seconds is plenty to start a download
 
     return { success: true, filename };
   } catch (err) {
     console.error("Backup download error:", err);
     try {
+      // Fallback to data URI
       const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(jsonStr);
       const link = document.createElement("a");
       link.href = dataUri;
       link.download = filename;
+      link.style.display = "none";
       document.body.appendChild(link);
       link.click();
       setTimeout(() => {
         if (link.parentNode) {
           document.body.removeChild(link);
         }
-      }, 10000);
+      }, 5000);
       return { success: true, filename };
     } catch {
-      return { success: false, filename };
+      return { success: false, filename, error: "Browser blocked the download." };
     }
   }
 }
@@ -294,41 +296,49 @@ export async function shareBackupToApps(customName?: string): Promise<{ success:
   const dateStr = new Date().toISOString().split("T")[0];
   const filename = customName || `bucklist-backup-${dateStr}.json`;
 
-  const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
-
-  if (typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof File !== "undefined") {
-    try {
-      const file = new File([blob], filename, { type: "application/json" });
-      if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: "Bucklist Backup",
-          text: `Bucklist watchlist backup (${dateStr})`,
-        });
-        return { success: true, filename };
-      }
-    } catch (err: any) {
-      if (err?.name === "AbortError") {
-        return { success: true, filename };
-      }
-      console.warn("navigator.share with file failed", err);
-    }
-
-    try {
-      await navigator.share({
-        title: "Bucklist Backup",
-        text: jsonStr,
-      });
-      return { success: true, filename };
-    } catch (err: any) {
-      if (err?.name === "AbortError") {
-        return { success: true, filename };
-      }
-    }
+  // 1. Check for Web Share API support
+  // On local IP connections (like 192.168.x.x), navigator.share will be undefined because it requires a Secure Context (HTTPS or localhost)
+  if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
+    return { 
+      success: false, 
+      filename, 
+      error: "Sharing not supported. (Are you on a local IP without HTTPS?). Please use Export to Storage." 
+    };
   }
 
-  const res = downloadBackupToStorage(customName);
-  return { success: res.success, filename: res.filename, error: res.success ? undefined : "Sharing is not supported on this browser." };
+  // 2. Try sharing as a File (with text/plain to increase Android intent compatibility)
+  try {
+    const blob = new Blob([jsonStr], { type: "text/plain" });
+    const file = new File([blob], filename, { type: "text/plain" });
+    
+    if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: "Bucklist Backup",
+        text: `Here is my Bucklist watchlist backup (${dateStr}).`,
+      });
+      return { success: true, filename };
+    }
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { success: true, filename };
+    }
+    console.warn("navigator.share with file failed, falling back to text share", err);
+  }
+
+  // 3. Fallback: Share the raw JSON as text
+  try {
+    await navigator.share({
+      title: "Bucklist Backup",
+      text: jsonStr,
+    });
+    return { success: true, filename };
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { success: true, filename };
+    }
+    return { success: false, filename, error: "Failed to share backup file." };
+  }
 }
 
 export async function exportBackupFile(customName?: string): Promise<{ success: boolean; method: "shared" | "downloaded" | "failed"; filename: string }> {

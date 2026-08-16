@@ -5,6 +5,9 @@ import type {
   MovieCollection,
 } from "../types";
 import { normalizePlatformsList } from "./api";
+import { Capacitor } from "@capacitor/core";
+import { Share } from "@capacitor/share";
+import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 
 const LOCAL_STORAGE_KEY = "bucklist_local_watchlist_v1";
 const TV_PROGRESS_KEY = "bucklist_tv_progress_v1";
@@ -239,19 +242,70 @@ export function createBackupPayload(): BucklistBackupData {
   };
 }
 
-export function downloadBackupToStorage(customName?: string): { success: boolean; filename: string; error?: string } {
+export async function downloadBackupToStorage(customName?: string): Promise<{ success: boolean; filename: string; error?: string }> {
   const data = createBackupPayload();
   const jsonStr = JSON.stringify(data, null, 2);
   const dateStr = new Date().toISOString().split("T")[0];
   const filename = customName || `bucklist-backup-${dateStr}.json`;
 
+  // 1. Native Capacitor App (Android/iOS)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const result = await Filesystem.writeFile({
+        path: filename,
+        data: jsonStr,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+      });
+      return { success: true, filename: result.uri };
+    } catch (err) {
+      console.error("Capacitor Filesystem write error:", err);
+      // Fall through to share menu if direct save fails due to Android permissions
+      try {
+        const cacheResult = await Filesystem.writeFile({
+          path: filename,
+          data: jsonStr,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+        await Share.share({ url: cacheResult.uri });
+        return { success: true, filename: cacheResult.uri };
+      } catch (shareErr) {
+        return { success: false, filename, error: "Failed to save file natively." };
+      }
+    }
+  }
+
+  // 2. Desktop Chrome/Edge: Native File Picker (Allows choosing the exact folder)
+  if (typeof window !== "undefined" && 'showSaveFilePicker' in window) {
+    try {
+      const handle = await (window as any).showSaveFilePicker({
+        suggestedName: filename,
+        types: [{
+          description: 'JSON Backup',
+          accept: { 'application/json': ['.json'] },
+        }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(jsonStr);
+      await writable.close();
+      return { success: true, filename: handle.name };
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return { success: true, filename };
+      }
+      // Proceed to fallback if it fails for other reasons
+    }
+  }
+
+  // 3. Mobile Web & Fallback: Standard browser download (Forced to Downloads folder by mobile OS)
   try {
     const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
-    link.style.display = "none"; // Required for some browsers
+    link.style.display = "none";
     document.body.appendChild(link);
     link.click();
 
@@ -264,14 +318,15 @@ export function downloadBackupToStorage(customName?: string): { success: boolean
       } catch {
         // ignore
       }
-    }, 5000); // 5 seconds is plenty to start a download
+    }, 5000);
 
     return { success: true, filename };
   } catch (err) {
     console.error("Backup download error:", err);
     try {
-      // Fallback to data URI
-      const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(jsonStr);
+      // Base64 URI is sometimes more reliable on strict Android WebViews than Blob URLs
+      const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
+      const dataUri = `data:application/json;base64,${base64}`;
       const link = document.createElement("a");
       link.href = dataUri;
       link.download = filename;
@@ -296,29 +351,48 @@ export async function shareBackupToApps(customName?: string): Promise<{ success:
   const dateStr = new Date().toISOString().split("T")[0];
   const filename = customName || `bucklist-backup-${dateStr}.json`;
 
-  // 1. Check for Web Share API support
-  // On local IP connections (like 192.168.x.x), navigator.share will be undefined because it requires a Secure Context (HTTPS or localhost)
+  // 1. Native Capacitor App (Android/iOS)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const result = await Filesystem.writeFile({
+        path: filename,
+        data: jsonStr,
+        directory: Directory.Cache,
+        encoding: Encoding.UTF8,
+      });
+      await Share.share({
+        title: "Bucklist Backup",
+        url: result.uri,
+        dialogTitle: "Share Backup",
+      });
+      return { success: true, filename: result.uri };
+    } catch (err) {
+      console.error("Capacitor share error:", err);
+      return { success: false, filename, error: "Native share failed." };
+    }
+  }
+
+  // 2. Web Share API Fallback
   if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
     return { 
       success: false, 
       filename, 
-      error: "Sharing not supported. (Are you on a local IP without HTTPS?). Please use Export to Storage." 
+      error: "Sharing requires a secure HTTPS connection." 
     };
   }
 
-  // 2. Try sharing as a File (with text/plain to increase Android intent compatibility)
+  // 3. Try sharing as a File
+  // CRITICAL ANDROID BUG FIX: Use text/plain MIME type and do NOT include `text` or `title`.
+  // Also, we do NOT check canShare here because some Android browsers falsely return false
+  // for perfectly valid intents. We just try it.
   try {
     const blob = new Blob([jsonStr], { type: "text/plain" });
     const file = new File([blob], filename, { type: "text/plain" });
     
-    if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        files: [file],
-        title: "Bucklist Backup",
-        text: `Here is my Bucklist watchlist backup (${dateStr}).`,
-      });
-      return { success: true, filename };
-    }
+    await navigator.share({
+      files: [file]
+    });
+    return { success: true, filename };
   } catch (err: any) {
     if (err?.name === "AbortError") {
       return { success: true, filename };
@@ -326,7 +400,7 @@ export async function shareBackupToApps(customName?: string): Promise<{ success:
     console.warn("navigator.share with file failed, falling back to text share", err);
   }
 
-  // 3. Fallback: Share the raw JSON as text
+  // 4. Fallback: Share the raw JSON as text
   try {
     await navigator.share({
       title: "Bucklist Backup",
@@ -337,17 +411,18 @@ export async function shareBackupToApps(customName?: string): Promise<{ success:
     if (err?.name === "AbortError") {
       return { success: true, filename };
     }
-    return { success: false, filename, error: "Failed to share backup file." };
+    return { success: false, filename, error: "Failed to open share menu." };
   }
 }
 
 export async function exportBackupFile(customName?: string): Promise<{ success: boolean; method: "shared" | "downloaded" | "failed"; filename: string }> {
-  const res = downloadBackupToStorage(customName);
+  const res = await downloadBackupToStorage(customName);
   return { success: res.success, method: res.success ? "downloaded" : "failed", filename: res.filename };
 }
 
 export function downloadBackupFile(customName?: string): boolean {
-  return downloadBackupToStorage(customName).success;
+  downloadBackupToStorage(customName).catch(() => {});
+  return true;
 }
 
 function sanitizeMovieItem(item: any): WatchlistMovie | null {

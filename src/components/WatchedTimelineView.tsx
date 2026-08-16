@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { Share } from "@capacitor/share";
 import {
   Calendar,
   CalendarDays,
@@ -13,6 +14,7 @@ import {
   ListOrdered,
   ChevronDown,
   ChevronsUpDown,
+  Share2,
 } from "lucide-react";
 import type { WatchlistMovie, TimelinePeriod } from "../types";
 import type { TvProgressMap } from "../lib/storage";
@@ -102,6 +104,22 @@ export function WatchedTimelineView({
       ...prev,
       [key]: !prev[key],
     }));
+  };
+
+  const handleShareClick = async (e: React.MouseEvent, item: WatchlistMovie) => {
+    e.stopPropagation();
+    try {
+      const isTv = item.media_type === "tv";
+      const shareText = `I just watched ${item.title}${item.release_year ? ` (${item.release_year})` : ""}!${item.rating ? ` I rated it ${item.rating}★.` : ""}`;
+      
+      await Share.share({
+        title: item.title,
+        text: shareText,
+        dialogTitle: `Share ${item.title}`,
+      });
+    } catch (err) {
+      console.warn("Error sharing:", err);
+    }
   };
 
   // Calculate overall stats
@@ -537,6 +555,15 @@ export function WatchedTimelineView({
                             <div className="flex items-center gap-1.5 ml-auto">
                               <button
                                 type="button"
+                                onClick={(e) => handleShareClick(e, item)}
+                                className="p-1.5 rounded-lg bg-zinc-950/70 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-zinc-800/80 transition-colors cursor-pointer"
+                                title="Share"
+                              >
+                                <Share2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
                                 onClick={() => onMoveToWatchlistClick(item)}
                                 className="p-1.5 rounded-lg bg-zinc-950/70 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80 transition-colors cursor-pointer"
                                 title="Move back to watchlist"
@@ -723,6 +750,15 @@ export function WatchedTimelineView({
 
                             {/* Quick Action Icons */}
                             <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => handleShareClick(e, item)}
+                                className="p-1 rounded-lg bg-zinc-950/80 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-zinc-800/80 transition-colors cursor-pointer"
+                                title="Share"
+                              >
+                                <Share2 className="w-3.5 h-3.5" />
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => onMoveToWatchlistClick(item)}

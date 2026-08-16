@@ -69,19 +69,18 @@ export function SettingsView({
     }
   };
 
-  const handleExportToStorage = () => {
-    setShowExportDrawer(false);
-    const result = downloadBackupToStorage();
+  const handleExportToStorage = async () => {
+    const result = await downloadBackupToStorage();
     if (result.success) {
       setExportNotification(`Saved ${result.filename} to Downloads.`);
     } else {
       setExportNotification(result.error || "Failed to trigger backup download.");
     }
+    setShowExportDrawer(false);
     setTimeout(() => setExportNotification(null), 4500);
   };
 
   const handleShareToApps = async () => {
-    setShowExportDrawer(false);
     try {
       const result = await shareBackupToApps();
       if (result.success) {
@@ -91,6 +90,8 @@ export function SettingsView({
       }
     } catch (err: any) {
       setExportNotification("Sharing failed.");
+    } finally {
+      setShowExportDrawer(false);
     }
     setTimeout(() => setExportNotification(null), 4500);
   };

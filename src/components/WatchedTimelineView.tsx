@@ -254,19 +254,19 @@ export function WatchedTimelineView({
   }
 
   return (
-    <div id="watched-timeline-container" className="w-full space-y-6 pb-28 sm:pb-20 animate-in fade-in duration-200">
+    <div id="watched-timeline-container" className="w-full space-y-6 pb-36 sm:pb-24 animate-in fade-in duration-200">
       {/* Streamlined Timeline Controls Row */}
-      <div className="flex items-center justify-between gap-2 py-1 flex-wrap">
+      <div className="flex items-center justify-between gap-1.5 sm:gap-2 py-1 w-full">
         {/* Period Selector (Month / Week / Year) */}
         <div
           id="timeline-period-tabs"
-          className="inline-flex items-center gap-0.5 bg-zinc-900 border border-zinc-800/80 p-0.5 rounded-xl"
+          className="inline-flex items-center gap-0.5 bg-zinc-900 border border-zinc-800/80 p-0.5 rounded-xl shrink-0"
         >
           <button
             type="button"
             id="timeline-group-month-btn"
             onClick={() => onPeriodChange("month")}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               timelinePeriod === "month"
                 ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
@@ -281,7 +281,7 @@ export function WatchedTimelineView({
             type="button"
             id="timeline-group-week-btn"
             onClick={() => onPeriodChange("week")}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               timelinePeriod === "week"
                 ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
@@ -296,7 +296,7 @@ export function WatchedTimelineView({
             type="button"
             id="timeline-group-year-btn"
             onClick={() => onPeriodChange("year")}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               timelinePeriod === "year"
                 ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
@@ -309,9 +309,9 @@ export function WatchedTimelineView({
         </div>
 
         {/* Right: Expand/Collapse All + Sort Button & Summary stats */}
-        <div className="flex items-center gap-1.5 ml-auto">
+        <div className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
           {avgOverallRating && (
-            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">
+            <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">
               <Star className="w-3 h-3 fill-amber-400" />
               {avgOverallRating} avg ({totalItemsCount})
             </span>
@@ -322,11 +322,11 @@ export function WatchedTimelineView({
               type="button"
               id="timeline-collapse-all-toggle"
               onClick={toggleAllGroups}
-              className="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 px-2.5 py-1 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+              className="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-medium text-zinc-300 hover:text-white transition-colors cursor-pointer"
               title={isAllCollapsed ? "Expand all timeline groups" : "Collapse all timeline groups"}
             >
-              <ChevronsUpDown className="w-3 h-3 text-amber-400 shrink-0" />
-              <span className="hidden xs:inline">{isAllCollapsed ? "Expand All" : "Collapse All"}</span>
+              <ChevronsUpDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-xs">{isAllCollapsed ? "Expand" : "Collapse"}</span>
             </button>
           )}
 
@@ -334,11 +334,11 @@ export function WatchedTimelineView({
             type="button"
             id="timeline-sort-order-toggle"
             onClick={() => setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
-            className="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 px-2.5 py-1 rounded-xl text-xs font-medium text-zinc-300 hover:text-white transition-colors cursor-pointer"
+            className="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-medium text-zinc-300 hover:text-white transition-colors cursor-pointer"
             title={`Sort order: ${sortOrder === "desc" ? "Newest First" : "Oldest First"}`}
           >
-            <ArrowUpDown className="w-3 h-3 text-amber-400 shrink-0" />
-            <span>{sortOrder === "desc" ? "Newest" : "Oldest"}</span>
+            <ArrowUpDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="text-xs">{sortOrder === "desc" ? "Newest" : "Oldest"}</span>
           </button>
         </div>
       </div>
@@ -494,13 +494,15 @@ export function WatchedTimelineView({
                                 </span>
                               )}
 
-                              {(item.platforms || []).length > 0 && (
-                                <div className="flex items-center gap-1 ml-auto">
-                                  {item.platforms.slice(0, 2).map((plat) => (
-                                    <OttBadge key={plat} platform={plat} size="xs" />
-                                  ))}
-                                </div>
-                              )}
+                              {(() => {
+                                const watchedPlat = item.watched_platform || (item.platforms || [])[0];
+                                if (!watchedPlat) return null;
+                                return (
+                                  <div className="flex items-center gap-1 ml-auto">
+                                    <OttBadge platform={watchedPlat} size="xs" />
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
 
@@ -622,7 +624,7 @@ export function WatchedTimelineView({
                     const watchedEpCount = progressData?.watchedEpisodes?.length || 0;
                     const totalEpCount = progressData?.totalEpisodes;
                     const itemDateStr = getItemDateString(item);
-                    const firstOtt = (item.platforms || [])[0];
+                    const firstOtt = item.watched_platform || (item.platforms || [])[0];
 
                     return (
                       <div

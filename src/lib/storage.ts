@@ -106,8 +106,8 @@ export type WatchedViewMode = ViewMode;
 export type ToWatchViewMode = "detailed" | "compact" | "grid";
 export type TimelinePeriod = "month" | "week" | "year";
 
-const TOWATCH_VIEW_MODE_KEY = "bucklist_towatch_view_mode_v1";
-const WATCHED_VIEW_MODE_KEY = "bucklist_watched_view_mode_v1";
+const TOWATCH_VIEW_MODE_KEY = "bucklist_towatch_view_mode_v2";
+const WATCHED_VIEW_MODE_KEY = "bucklist_watched_view_mode_v2";
 const TIMELINE_PERIOD_KEY = "bucklist_timeline_period_v1";
 
 export function getLocalToWatchViewMode(): ToWatchViewMode {
@@ -119,7 +119,7 @@ export function getLocalToWatchViewMode(): ToWatchViewMode {
   } catch {
     // ignore
   }
-  return "detailed";
+  return "grid";
 }
 
 export function saveLocalToWatchViewMode(mode: ToWatchViewMode): void {
@@ -162,7 +162,7 @@ export function getLocalWatchedViewMode(): WatchedViewMode {
   } catch {
     // ignore
   }
-  return "compact";
+  return "timeline";
 }
 
 export function saveLocalWatchedViewMode(mode: WatchedViewMode): void {
@@ -270,6 +270,8 @@ function sanitizeMovieItem(item: any): WatchlistMovie | null {
 
   const watched = Boolean(item.watched);
   const watchedDate = item.watched_date ? String(item.watched_date) : null;
+  const watchedSource = typeof item.watched_source === "string" ? item.watched_source : undefined;
+  const watchedPlatform = typeof item.watched_platform === "string" ? item.watched_platform : null;
   const rating = typeof item.rating === "number" ? Math.max(0, Math.min(10, item.rating)) : null;
   const createdAt = typeof item.created_at === "string" ? item.created_at : new Date().toISOString();
 
@@ -284,6 +286,8 @@ function sanitizeMovieItem(item: any): WatchlistMovie | null {
     platforms,
     watched,
     watched_date: watchedDate,
+    watched_source: watchedSource,
+    watched_platform: watchedPlatform,
     rating,
     created_at: createdAt,
   };

@@ -63,12 +63,20 @@ export function SearchAddDrawer({
   const inputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
 
-  // Auto focus input when drawer opens
+  // Only auto-focus on desktop devices to avoid opening the mobile virtual keyboard automatically
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
+      const isMobileOrTouch =
+        typeof window !== "undefined" &&
+        (window.innerWidth < 768 ||
+          window.matchMedia("(pointer: coarse)").matches ||
+          "ontouchstart" in window);
+
+      if (!isMobileOrTouch) {
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 100);
+      }
     } else {
       setQuery("");
       setSearchResults([]);

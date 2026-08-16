@@ -105,10 +105,32 @@ export function getPlatformAccentTheme(name: string): {
     };
   }
 
+  if (lower.includes("theatre") || lower.includes("cinema") || lower.includes("imax") || lower.includes("4dx") || lower.includes("dolby")) {
+    return {
+      bg: "bg-amber-950/70 hover:bg-amber-950/90",
+      border: "border-amber-500/50 hover:border-amber-400/70",
+      text: "text-amber-300",
+    };
+  }
+  if (lower.includes("blu-ray") || lower.includes("bluray") || lower.includes("dvd") || lower.includes("disc")) {
+    return {
+      bg: "bg-violet-950/70 hover:bg-violet-950/90",
+      border: "border-violet-500/40 hover:border-violet-400/60",
+      text: "text-violet-200",
+    };
+  }
+  if (lower.includes("flight") || lower.includes("fest")) {
+    return {
+      bg: "bg-indigo-950/70 hover:bg-indigo-950/90",
+      border: "border-indigo-500/40 hover:border-indigo-400/60",
+      text: "text-indigo-200",
+    };
+  }
+
   return {
-    bg: "bg-amber-950/50 hover:bg-amber-950/70",
-    border: "border-amber-500/35 hover:border-amber-500/55",
-    text: "text-amber-200",
+    bg: "bg-zinc-800/80 hover:bg-zinc-800",
+    border: "border-zinc-700/60 hover:border-zinc-600",
+    text: "text-zinc-200",
   };
 }
 

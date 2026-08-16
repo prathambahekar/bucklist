@@ -60,6 +60,7 @@ import { EpisodeDrawer } from "./components/EpisodeDrawer";
 import { StarRating } from "./components/StarRating";
 import { OttBadge, getPlatformAccentTheme } from "./components/OttBadge";
 import { DatePickerPopover } from "./components/DatePickerPopover";
+import { WatchVenuePopover, WatchVenueType } from "./components/WatchVenuePopover";
 import { SettingsView } from "./components/SettingsView";
 import { WatchedTimelineView } from "./components/WatchedTimelineView";
 import { SearchAddDrawer } from "./components/SearchAddDrawer";
@@ -105,6 +106,8 @@ export default function App() {
   const [userWatchedDate, setUserWatchedDate] = useState<string>(() =>
     getLocalTodayString()
   );
+  const [userWatchedVenue, setUserWatchedVenue] = useState<WatchVenueType>("ott");
+  const [userWatchedPlatform, setUserWatchedPlatform] = useState<string>("");
   const [detailMovie, setDetailMovie] = useState<WatchlistMovie | SearchResult | null>(null);
   const [genreModalOpen, setGenreModalOpen] = useState(false);
   const [detailExtraLoading, setDetailExtraLoading] = useState(false);
@@ -475,6 +478,21 @@ export default function App() {
       setWatchedModalMovie(movie);
       setUserRating(defaultRating ?? movie.rating ?? 5);
       setUserWatchedDate(movie.watched_date || getLocalTodayString());
+
+      // Determine initial venue & platform
+      const existingVenue = (movie.watched_source as WatchVenueType) || (
+        movie.platforms?.some((p) => {
+          const lower = p.toLowerCase();
+          return lower.includes("theatre") || lower.includes("cinema") || lower.includes("imax");
+        })
+          ? "theatre"
+          : "ott"
+      );
+      setUserWatchedVenue(existingVenue);
+      setUserWatchedPlatform(
+        movie.watched_platform ||
+          (movie.platforms && movie.platforms.length > 0 ? movie.platforms[0] : "")
+      );
     },
     []
   );
@@ -525,11 +543,31 @@ export default function App() {
     if (!watchedModalMovie) return;
     const watchedDate = userWatchedDate || watchedModalMovie.watched_date || getLocalTodayString();
 
+    // Prepare platform list and selected venue:
+    // When marked as watched, store ONLY the selected OTT or Theatre/Other
+    let finalPlatform = "";
+    if (userWatchedVenue === "theatre") {
+      finalPlatform = "Theatre";
+    } else if (userWatchedVenue === "other") {
+      finalPlatform = userWatchedPlatform.trim() || "Other";
+    } else {
+      // OTT
+      finalPlatform =
+        userWatchedPlatform.trim() ||
+        (watchedModalMovie.platforms && watchedModalMovie.platforms[0]) ||
+        "OTT";
+    }
+
+    const updatedPlatforms = [finalPlatform];
+
     const updatedMovie: WatchlistMovie = {
       ...watchedModalMovie,
       watched: true,
       watched_date: watchedDate,
       rating: userRating,
+      watched_source: userWatchedVenue,
+      watched_platform: finalPlatform,
+      platforms: updatedPlatforms,
     };
 
     setMovies((prev) => prev.filter((m) => m.tmdb_id !== watchedModalMovie.tmdb_id));
@@ -889,7 +927,7 @@ export default function App() {
     genreModalOpen;
 
   return (
-    <div id="bucklist-app" className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center pb-24">
+    <div id="bucklist-app" className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center pb-36 sm:pb-28">
       <div className="w-full max-w-6xl xl:max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
         {/* Header Bar */}
         <header id="app-header" className="flex items-center justify-between py-2 sm:py-3 mb-2 sm:mb-3">
@@ -900,7 +938,7 @@ export default function App() {
             <div>
               <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-zinc-100 flex items-center gap-2">
                 <span>Bucklist</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/90 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded-md hidden xs:inline-block">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/90 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded-md hidden sm:inline-block">
                   Cinema
                 </span>
               </h1>
@@ -937,6 +975,9 @@ export default function App() {
 
         {tab === "settings" ? (
           <SettingsView
+            watched={watched}
+            movies={movies}
+            tvProgressMap={tvProgressMap}
             onDataUpdated={() => {
               fetchAll();
               setTvProgressMap(getLocalTvProgress());
@@ -1163,13 +1204,13 @@ export default function App() {
         {tab === "watched" && (
           <div
             id="watched-category-tabs"
-            className="flex items-center gap-1.5 pb-1 mb-3 overflow-x-auto scrollbar-none"
+            className="flex items-center gap-1.5 pb-1 mb-3 overflow-x-auto scrollbar-none pr-4"
           >
             <button
               type="button"
               id="watched-tab-all"
               onClick={() => handleSetWatchedCategory("all")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 watchedCategory === "all"
                   ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                   : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
@@ -1191,7 +1232,7 @@ export default function App() {
               type="button"
               id="watched-tab-movies"
               onClick={() => handleSetWatchedCategory("movies")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 watchedCategory === "movies"
                   ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                   : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
@@ -1214,7 +1255,7 @@ export default function App() {
               type="button"
               id="watched-tab-series"
               onClick={() => handleSetWatchedCategory("series")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 watchedCategory === "series"
                   ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                   : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
@@ -1237,7 +1278,7 @@ export default function App() {
               type="button"
               id="watched-tab-anime"
               onClick={() => handleSetWatchedCategory("anime")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 watchedCategory === "anime"
                   ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                   : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
@@ -1539,18 +1580,26 @@ export default function App() {
                           <div className="flex items-center justify-between mt-1 text-[10px] sm:text-[11px] text-zinc-500">
                             <span>{item.release_year || (isTv ? "TV Series" : "Movie")}</span>
                             {isWatchedTab ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenWatchedModal(item, item.rating || 5);
-                                }}
-                                className="text-zinc-400 hover:text-amber-300 flex items-center gap-0.5 transition-colors font-medium"
-                                title="Edit rating & date"
-                              >
-                                <Edit3 className="w-2.5 h-2.5" />
-                                <span>Edit</span>
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                {(item.watched_platform || (item.platforms && item.platforms.length > 0)) && (
+                                  <OttBadge
+                                    platform={item.watched_platform || item.platforms[0]}
+                                    size="xs"
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenWatchedModal(item, item.rating || 5);
+                                  }}
+                                  className="text-zinc-400 hover:text-amber-300 flex items-center gap-0.5 transition-colors font-medium cursor-pointer"
+                                  title="Edit rating & venue"
+                                >
+                                  <Edit3 className="w-2.5 h-2.5" />
+                                  <span>Edit</span>
+                                </button>
+                              </div>
                             ) : (
                               (item.platforms || []).length > 0 && (
                                 <span className="text-[10px] text-amber-300 font-medium truncate max-w-[80px]">
@@ -1567,7 +1616,9 @@ export default function App() {
 
                 /* OPTION 2: Compact Card View Mode */
                 if (activeViewMode === "compact") {
-                  const firstOtt = (item.platforms || [])[0];
+                  const firstOtt = isWatchedTab
+                    ? (item.watched_platform || (item.platforms || [])[0])
+                    : (item.platforms || [])[0];
 
                   return (
                     <SwipeableMovieCard
@@ -1839,20 +1890,26 @@ export default function App() {
                               </span>
                             )}
                             {isWatchedTab && item.watched_date && (
-                              <span className="text-[10px] text-zinc-500 font-medium ml-auto hidden xs:inline">
+                              <span className="text-[10px] text-zinc-500 font-medium ml-auto hidden sm:inline">
                                 {item.watched_date}
                               </span>
                             )}
                           </div>
 
                           {/* OTT Badges with platform accent theme */}
-                          {(item.platforms || []).length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              {item.platforms.map((p) => (
-                                <OttBadge key={p} platform={p} size="sm" />
-                              ))}
-                            </div>
-                          )}
+                          {(() => {
+                            const displayPlatforms = isWatchedTab
+                              ? [item.watched_platform || (item.platforms && item.platforms[0])].filter(Boolean) as string[]
+                              : (item.platforms || []);
+                            if (!displayPlatforms.length) return null;
+                            return (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {displayPlatforms.map((p) => (
+                                  <OttBadge key={p} platform={p} size="sm" />
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         {/* Bottom Action / Episode Tracker / Rating */}
@@ -1951,7 +2008,7 @@ export default function App() {
                                     title="Edit rating & date"
                                   >
                                     <Edit3 className="w-3 h-3" />
-                                    <span className="hidden xs:inline">Edit</span>
+                                    <span className="hidden sm:inline">Edit</span>
                                   </button>
                                 </div>
                               </div>
@@ -2025,84 +2082,6 @@ export default function App() {
           </div>
         )}
       </div>
-
-      {/* Mark Watched Modal */}
-      {/* Rate & Mark Watched Modal / Bottom Sheet */}
-      {watchedModalMovie && (
-        <div
-          id="mark-watched-modal-backdrop"
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 transition-opacity duration-200"
-          onClick={() => setWatchedModalMovie(null)}
-        >
-          <div
-            id="mark-watched-modal"
-            className="w-full max-w-md mx-auto bg-zinc-950 sm:bg-zinc-900 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl p-6 text-center shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-zinc-100">
-              {watchedModalMovie.watched ? "Edit Your Rating" : "Rate & Mark Watched"}
-            </h3>
-            <p className="text-sm text-zinc-400 mt-1 mb-6 font-medium truncate">
-              {watchedModalMovie.title}
-            </p>
-
-            <div className="flex flex-col items-center justify-center gap-3 mb-5">
-              <StarRating
-                value={userRating}
-                onChange={setUserRating}
-                size="xl"
-                allowHalf={true}
-                showValueText={true}
-              />
-
-              {/* Quick Half-Star Rating Chips */}
-              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1">
-                {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setUserRating(val)}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
-                      userRating === val
-                        ? "bg-amber-500 text-zinc-950 font-bold shadow-sm"
-                        : "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
-                    }`}
-                  >
-                    {val}★
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Simple Date Selector Button / Floating Popover */}
-            <div className="flex items-center justify-center mb-6">
-              <DatePickerPopover
-                value={userWatchedDate}
-                onChange={setUserWatchedDate}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                id="save-rating-btn"
-                type="button"
-                onClick={handleSaveWatched}
-                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-sm transition-colors shadow-md shadow-amber-500/20 cursor-pointer"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={() => setWatchedModalMovie(null)}
-                className="w-full py-2 rounded-xl text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Movie & TV Details Bottom Drawer */}
       {detailMovie && (
@@ -2473,7 +2452,7 @@ export default function App() {
           id="open-search-drawer-fab"
           type="button"
           onClick={() => setIsSearchDrawerOpen(true)}
-          className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:right-8 z-40 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-amber-500/30 border border-amber-400/60 font-bold text-sm tracking-tight cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group animate-in fade-in duration-150"
+          className="fixed bottom-22 right-4 sm:bottom-6 sm:right-6 md:right-8 z-40 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-amber-500/30 border border-amber-400/60 font-bold text-sm tracking-tight cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group animate-in fade-in duration-150"
           title="Search & Add to Bucklist (+)"
           aria-label="Add Movie or Series"
         >
@@ -2498,6 +2477,92 @@ export default function App() {
         existingWatchedIds={existingWatchedIds}
         addingId={addingId}
       />
+
+      {/* Rate & Mark Watched Modal / Bottom Sheet - Highest Priority (z-[100]) Above All Drawers */}
+      {watchedModalMovie && (
+        <div
+          id="mark-watched-modal-backdrop"
+          className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[100] flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 transition-opacity duration-200"
+          onClick={() => setWatchedModalMovie(null)}
+        >
+          <div
+            id="mark-watched-modal"
+            className="w-full max-w-md mx-auto bg-zinc-950 sm:bg-zinc-900 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl p-6 text-center shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-zinc-100">
+              {watchedModalMovie.watched ? "Edit Your Rating" : "Rate & Mark Watched"}
+            </h3>
+            <p className="text-sm text-zinc-400 mt-1 mb-6 font-medium truncate">
+              {watchedModalMovie.title}
+            </p>
+
+            <div className="flex flex-col items-center justify-center gap-3 mb-5">
+              <StarRating
+                value={userRating}
+                onChange={setUserRating}
+                size="xl"
+                allowHalf={true}
+                showValueText={true}
+              />
+
+              {/* Quick Half-Star Rating Chips */}
+              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1">
+                {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setUserRating(val)}
+                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
+                      userRating === val
+                        ? "bg-amber-500 text-zinc-950 font-bold shadow-sm"
+                        : "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
+                    }`}
+                  >
+                    {val}★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Date & Watch Venue Row: Left: Date (Watched Today) | Right: Venue (OTT / Theatre / Other) */}
+            <div className="flex items-center justify-center gap-2 mb-6 flex-wrap">
+              <DatePickerPopover
+                value={userWatchedDate}
+                onChange={setUserWatchedDate}
+              />
+              <WatchVenuePopover
+                venue={userWatchedVenue}
+                platform={userWatchedPlatform}
+                moviePlatforms={watchedModalMovie.platforms}
+                onChange={(v, p) => {
+                  setUserWatchedVenue(v);
+                  setUserWatchedPlatform(p);
+                }}
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                id="save-rating-btn"
+                type="button"
+                onClick={handleSaveWatched}
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-sm transition-colors shadow-md shadow-amber-500/20 cursor-pointer"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setWatchedModalMovie(null)}
+                className="w-full py-2 rounded-xl text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

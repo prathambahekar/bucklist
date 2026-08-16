@@ -34,6 +34,25 @@ interface NotificationPopoverProps {
   onSelectMovie?: (movie: WatchlistMovie) => void;
 }
 
+const DISMISSED_NOTIFICATIONS_KEY = "bucklist_dismissed_notifications_v1";
+
+function getDismissedIds(): string[] {
+  try {
+    const raw = localStorage.getItem(DISMISSED_NOTIFICATIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDismissedIds(ids: string[]): void {
+  try {
+    localStorage.setItem(DISMISSED_NOTIFICATIONS_KEY, JSON.stringify(ids));
+  } catch {
+    // ignore
+  }
+}
+
 export function NotificationPopover({
   movies,
   watched,
@@ -42,26 +61,16 @@ export function NotificationPopover({
 }: NotificationPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const [dismissedIds, setDismissedIds] = useState<string[]>(getDismissedIds);
 
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-    return [
-      {
-        id: "welcome-tip",
-        type: "tip",
-        title: "Bucklist Cinema Ready",
-        message: "Your watchlist and timeline are backed up locally and ready for tracking.",
-        timestamp: "Just now",
-        read: false,
-      },
-    ];
-  });
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  // Calculate dynamic smart notifications: Upcoming releases, Weekly 'What to Watch Tonight', TV progress, milestones
+  // Calculate dynamic notifications cleanly and conservatively (no spam/dummy tips)
   useEffect(() => {
     const list: AppNotification[] = [];
     const currentYear = new Date().getFullYear();
 
-    // 1. SMART NOTIFICATION: Upcoming Release Dates / New Releases on Watchlist
+    // 1. Only show if an actual title from watchlist is releasing this year
     const upcomingOrNew = movies.filter((m) => {
       if (!m.release_year) return false;
       const year = parseInt(m.release_year, 10);
@@ -70,130 +79,53 @@ export function NotificationPopover({
 
     if (upcomingOrNew.length > 0) {
       const topUpcoming = upcomingOrNew[0];
-      const platformInfo =
-        topUpcoming.platforms && topUpcoming.platforms.length > 0
-          ? `Streaming on ${topUpcoming.platforms[0]}`
-          : "Now available / In Theaters";
+      const notifId = `release-${topUpcoming.id}`;
+      if (!dismissedIds.includes(notifId)) {
+        const platformInfo =
+          topUpcoming.platforms && topUpcoming.platforms.length > 0
+            ? `Streaming on ${topUpcoming.platforms[0]}`
+            : "Available to stream or in theaters";
 
-      list.push({
-        id: `release-${topUpcoming.id}`,
-        type: "release",
-        title: `Now Showing: ${topUpcoming.title} (${topUpcoming.release_year})`,
-        message: `From your Watchlist: ${platformInfo}. Perfect time to watch!`,
-        timestamp: "Release Alert",
-        read: false,
-        movieId: topUpcoming.id,
-        badge: "New Release",
-      });
-    }
-
-    // 2. SMART NOTIFICATION: Weekly "What to Watch Tonight" based on Highest-Rated Genres
-    if (watched.length > 0 && movies.length > 0) {
-      // Calculate genre weights and average ratings
-      const genreScoreMap: Record<string, { totalScore: number; count: number }> = {};
-
-      watched.forEach((m) => {
-        const rating = m.rating || 4;
-        (m.genres || []).forEach((g) => {
-          if (!genreScoreMap[g]) {
-            genreScoreMap[g] = { totalScore: 0, count: 0 };
-          }
-          genreScoreMap[g].totalScore += rating;
-          genreScoreMap[g].count += 1;
+        list.push({
+          id: notifId,
+          type: "release",
+          title: `${topUpcoming.title} (${topUpcoming.release_year})`,
+          message: `In your Watchlist: ${platformInfo}.`,
+          timestamp: "Release",
+          read: true,
+          movieId: topUpcoming.id,
+          badge: "Release",
         });
-      });
-
-      // Find top favorite genre
-      let topGenre = "";
-      let topAvg = 0;
-      Object.entries(genreScoreMap).forEach(([genre, stat]) => {
-        const avg = stat.totalScore / stat.count;
-        if (stat.count >= 1 && (avg > topAvg || (avg === topAvg && stat.count > (genreScoreMap[topGenre]?.count || 0)))) {
-          topAvg = avg;
-          topGenre = genre;
-        }
-      });
-
-      // Find candidate from unwatched watchlist matching top genre
-      if (topGenre) {
-        const recommendation = movies.find((m) => (m.genres || []).includes(topGenre));
-        if (recommendation) {
-          list.push({
-            id: `tonight-pick-${recommendation.id}`,
-            type: "recommendation",
-            title: `What to Watch Tonight: ${recommendation.title}`,
-            message: `Handpicked for you based on your high ${topGenre} ratings (${topAvg.toFixed(1)}★ avg).`,
-            timestamp: "Tonight's Pick",
-            read: false,
-            movieId: recommendation.id,
-            badge: topGenre,
-          });
-        }
       }
-    } else if (movies.length > 0) {
-      // Fallback Weekly pick if no watched history yet
-      const firstMovie = movies[0];
-      list.push({
-        id: `tonight-pick-${firstMovie.id}`,
-        type: "recommendation",
-        title: `What to Watch Tonight: ${firstMovie.title}`,
-        message: `Top pick from your queue. Relax and enjoy cinema tonight!`,
-        timestamp: "Tonight's Pick",
-        read: false,
-        movieId: firstMovie.id,
-      });
     }
 
-    // 3. Check for TV series in watchlist with unwatched episodes
+    // 2. TV series with active unwatched episodes in progress (max 1 show alert)
     const tvSeries = movies.filter((m) => m.media_type === "tv");
-    tvSeries.slice(0, 2).forEach((show) => {
+    for (const show of tvSeries) {
       const progress = tvProgressMap[show.tmdb_id];
       const watchedCount = progress?.watchedEpisodes?.length || 0;
       const total = progress?.totalEpisodes;
 
-      if (total && watchedCount < total) {
-        const remaining = total - watchedCount;
-        list.push({
-          id: `tv-progress-${show.id}`,
-          type: "episode",
-          title: `Continue ${show.title}`,
-          message: `${remaining} ${remaining === 1 ? "episode" : "episodes"} remaining to finish this show.`,
-          timestamp: "In Progress",
-          read: false,
-          movieId: show.id,
-        });
+      if (total && watchedCount > 0 && watchedCount < total) {
+        const notifId = `tv-progress-${show.id}`;
+        if (!dismissedIds.includes(notifId)) {
+          const remaining = total - watchedCount;
+          list.push({
+            id: notifId,
+            type: "episode",
+            title: `Continue ${show.title}`,
+            message: `${remaining} ${remaining === 1 ? "episode" : "episodes"} remaining.`,
+            timestamp: "In Progress",
+            read: true,
+            movieId: show.id,
+          });
+          break; // Keep to at most 1 TV reminder to avoid clutter
+        }
       }
-    });
-
-    // 4. Watchlist queue alert
-    if (movies.length > 0 && list.length < 3) {
-      list.push({
-        id: "watchlist-queue",
-        type: "watchlist",
-        title: `${movies.length} ${movies.length === 1 ? "Title" : "Titles"} in Watchlist`,
-        message: `Next up in your queue: "${movies[0].title}".`,
-        timestamp: "Queue",
-        read: false,
-        movieId: movies[0].id,
-      });
     }
 
-    // 5. Watched milestone alert
-    if (watched.length > 0) {
-      list.push({
-        id: `milestone-${watched.length}`,
-        type: "milestone",
-        title: `${watched.length} Movies & Series Logged!`,
-        message: "Check your watched timeline for interactive ratings, stats, and logs.",
-        timestamp: "Milestone",
-        read: false,
-      });
-    }
-
-    if (list.length > 0) {
-      setNotifications(list);
-    }
-  }, [movies, watched, tvProgressMap]);
+    setNotifications(list);
+  }, [movies, watched, tvProgressMap, dismissedIds]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -221,11 +153,18 @@ export function NotificationPopover({
   };
 
   const clearAll = () => {
+    const allIds = notifications.map((n) => n.id);
+    const updated = Array.from(new Set([...dismissedIds, ...allIds]));
+    setDismissedIds(updated);
+    saveDismissedIds(updated);
     setNotifications([]);
   };
 
   const removeNotification = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const updated = Array.from(new Set([...dismissedIds, id]));
+    setDismissedIds(updated);
+    saveDismissedIds(updated);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 

@@ -9,6 +9,8 @@ export interface WatchlistMovie {
   platforms: string[];
   watched: boolean;
   watched_date: string | null;
+  watched_source?: "ott" | "theatre" | "other" | string;
+  watched_platform?: string | null;
   rating: number | null;
   created_at: string;
 }

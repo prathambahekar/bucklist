@@ -28,7 +28,7 @@ import {
   updateSeriesWatchedEpisodes,
   getSeriesSeasonRatings,
   updateSeriesSeasonRating,
-} from "../lib/supabase";
+} from "../lib/storage";
 import { StarRating } from "./StarRating";
 import type {
   WatchlistMovie,
@@ -412,7 +412,7 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
                     {movie.platforms.map((p) => (
                       <span
                         key={p}
-                        className="text-[10px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded"
+                        className="text-[10px] font-medium text-amber-300/90 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded shadow-2xs"
                       >
                         {p}
                       </span>

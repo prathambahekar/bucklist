@@ -3,25 +3,72 @@ import type { SearchResult } from "../types";
 export const POPULAR_OTT_RULES: Array<{ match: string; name: string }> = [
   { match: "netflix", name: "Netflix" },
   { match: "prime video", name: "Prime Video" },
+  { match: "amazon prime", name: "Prime Video" },
+  { match: "amazon", name: "Prime Video" },
   { match: "jiohotstar", name: "JioHotstar" },
   { match: "disney+ hotstar", name: "JioHotstar" },
+  { match: "disney plus hotstar", name: "JioHotstar" },
   { match: "hotstar", name: "JioHotstar" },
   { match: "jiocinema", name: "JioHotstar" },
   { match: "jio cinema", name: "JioHotstar" },
-  { match: "disney", name: "Disney+" },
+  { match: "jio", name: "JioHotstar" },
+  { match: "disney+", name: "JioHotstar" },
+  { match: "disney plus", name: "JioHotstar" },
+  { match: "disney", name: "JioHotstar" },
+  { match: "hbo max", name: "JioHotstar" },
+  { match: "hbo", name: "JioHotstar" },
+  { match: "max", name: "JioHotstar" },
+  { match: "hulu", name: "JioHotstar" },
   { match: "apple tv", name: "Apple TV+" },
-  { match: "hulu", name: "Hulu" },
-  { match: "hbo max", name: "Max" },
-  { match: "max", name: "Max" },
+  { match: "apple", name: "Apple TV+" },
   { match: "zee5", name: "ZEE5" },
+  { match: "zee", name: "ZEE5" },
   { match: "sonyliv", name: "SonyLIV" },
   { match: "sony liv", name: "SonyLIV" },
+  { match: "sony", name: "SonyLIV" },
   { match: "paramount", name: "Paramount+" },
   { match: "peacock", name: "Peacock" },
   { match: "crunchyroll", name: "Crunchyroll" },
   { match: "mubi", name: "MUBI" },
-  { match: "lionsgate", name: "Lionsgate Play" },
 ];
+
+export function normalizePlatformName(p: string): string | null {
+  const lower = (p || "").toLowerCase().trim();
+  // Remove Lionsgate
+  if (lower.includes("lionsgate") || lower.includes("lions gate")) {
+    return null;
+  }
+  // Hulu, HBO Max / Max, Disney+, Hotstar, JioCinema -> JioHotstar
+  if (
+    lower.includes("disney") ||
+    lower.includes("hotstar") ||
+    lower.includes("jio") ||
+    lower.includes("hbo") ||
+    lower.includes("max") ||
+    lower.includes("hulu")
+  ) {
+    return "JioHotstar";
+  }
+  if (lower.includes("prime") || lower.includes("amazon")) return "Prime Video";
+  if (lower.includes("apple")) return "Apple TV+";
+  if (lower.includes("sony") || lower.includes("liv")) return "SonyLIV";
+  if (lower.includes("zee")) return "ZEE5";
+  if (lower.includes("netflix")) return "Netflix";
+  if (lower.includes("paramount")) return "Paramount+";
+  if (lower.includes("peacock")) return "Peacock";
+  if (lower.includes("crunchyroll")) return "Crunchyroll";
+  if (lower.includes("mubi")) return "MUBI";
+  return p;
+}
+
+export function normalizePlatformsList(platforms: string[] = []): string[] {
+  const result = new Set<string>();
+  for (const raw of platforms) {
+    const norm = normalizePlatformName(raw);
+    if (norm) result.add(norm);
+  }
+  return Array.from(result);
+}
 
 export function filterPopularPlatforms(rawPlatforms: string[]): string[] {
   const result = new Set<string>();

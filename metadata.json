@@ -1,0 +1,8 @@
+{
+  "name": "Bucklist",
+  "description": "Personal movie and TV series watchlist and episode tracker with TMDB integration",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -204,13 +204,13 @@ export function getPlatformKey(name: string): string {
   if (
     lower.includes("jio") ||
     lower.includes("hotstar") ||
-    lower.includes("disney+ hotstar")
+    lower.includes("disney") ||
+    lower.includes("hbo") ||
+    lower.includes("max") ||
+    lower.includes("hulu")
   )
     return "jiohotstar";
-  if (lower.includes("disney")) return "disney";
-  if (lower.includes("hbo") || lower.includes("max")) return "max";
   if (lower.includes("apple")) return "apple";
-  if (lower.includes("hulu")) return "hulu";
   if (lower.includes("sony") || lower.includes("liv")) return "sonyliv";
   if (lower.includes("zee")) return "zee5";
   if (lower.includes("paramount")) return "paramount";

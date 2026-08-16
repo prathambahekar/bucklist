@@ -983,8 +983,8 @@ export default function App() {
     genreModalOpen;
 
   return (
-    <div id="bucklist-app" className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center pb-36 sm:pb-28">
-      <div className="w-full max-w-6xl xl:max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+    <div id="bucklist-app" className="min-h-screen w-full max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col items-center pb-36 sm:pb-28">
+      <div className="w-full max-w-6xl xl:max-w-7xl px-3.5 py-4 sm:px-6 lg:px-8 overflow-x-hidden">
         {/* Header Bar */}
         <header id="app-header" className="flex items-center justify-between py-2 sm:py-3 mb-2 sm:mb-3">
           <div className="flex items-center gap-3 select-none">
@@ -1281,13 +1281,13 @@ export default function App() {
         {tab === "watched" && (
           <div
             id="watched-category-tabs"
-            className="flex items-center gap-1.5 pb-1 mb-3 overflow-x-auto scrollbar-none pr-4"
+            className="grid grid-cols-4 gap-1 sm:flex sm:items-center sm:gap-1.5 pb-1 mb-3 w-full"
           >
             <button
               type="button"
               id="watched-tab-all"
               onClick={() => handleSetWatchedCategory("all")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 watchedCategory === "all"
                   ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                   : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
@@ -1295,7 +1295,7 @@ export default function App() {
             >
               <span>All</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-bold ${
                   watchedCategory === "all"
                     ? "bg-zinc-950/25 text-zinc-950"
                     : "bg-zinc-800 text-zinc-400"
@@ -1309,16 +1309,16 @@ export default function App() {
               type="button"
               id="watched-tab-movies"
               onClick={() => handleSetWatchedCategory("movies")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 watchedCategory === "movies"
                   ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                   : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
               }`}
             >
-              <Film className="w-3.5 h-3.5" />
-              <span>Movies</span>
+              <Film className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="truncate">Movies</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-bold ${
                   watchedCategory === "movies"
                     ? "bg-zinc-950/25 text-zinc-950"
                     : "bg-zinc-800 text-zinc-400"
@@ -1332,16 +1332,16 @@ export default function App() {
               type="button"
               id="watched-tab-series"
               onClick={() => handleSetWatchedCategory("series")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 watchedCategory === "series"
                   ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                   : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
               }`}
             >
-              <Tv className="w-3.5 h-3.5" />
-              <span>Series</span>
+              <Tv className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="truncate">Series</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-bold ${
                   watchedCategory === "series"
                     ? "bg-zinc-950/25 text-zinc-950"
                     : "bg-zinc-800 text-zinc-400"
@@ -1355,16 +1355,16 @@ export default function App() {
               type="button"
               id="watched-tab-anime"
               onClick={() => handleSetWatchedCategory("anime")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 watchedCategory === "anime"
                   ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                   : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Anime</span>
+              <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">Anime</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-bold ${
                   watchedCategory === "anime"
                     ? "bg-zinc-950/25 text-zinc-950"
                     : "bg-zinc-800 text-zinc-400"
@@ -2155,7 +2155,7 @@ export default function App() {
             }}
           />
         ) : (
-          <div id="floating-navigation" className="fixed bottom-5 sm:bottom-6 left-0 right-0 flex justify-center px-4 z-40 pointer-events-none">
+          <div id="floating-navigation" className="fixed bottom-4 sm:bottom-6 left-0 right-0 flex justify-center px-4 z-40 pointer-events-none pb-[env(safe-area-inset-bottom,0px)]">
             <div className="flex items-center gap-1 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 p-1.5 rounded-2xl shadow-2xl max-w-sm w-full pointer-events-auto">
               <button
                 id="nav-tab-towatch"
@@ -2580,7 +2580,7 @@ export default function App() {
           id="open-search-drawer-fab"
           type="button"
           onClick={() => setIsSearchDrawerOpen(true)}
-          className="fixed bottom-22 right-4 sm:bottom-6 sm:right-6 md:right-8 z-40 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-amber-500/30 border border-amber-400/60 font-bold text-sm tracking-tight cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group animate-in fade-in duration-150"
+          className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:right-8 z-40 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-amber-500/30 border border-amber-400/60 font-bold text-sm tracking-tight cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group animate-in fade-in duration-150 pb-[env(safe-area-inset-bottom,0px)]"
           title="Search & Add to Bucklist (+)"
           aria-label="Add Movie or Series"
         >

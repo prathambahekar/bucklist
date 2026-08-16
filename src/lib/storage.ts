@@ -239,21 +239,62 @@ export function createBackupPayload(): BucklistBackupData {
   };
 }
 
-export function downloadBackupFile(customName?: string): void {
-  const data = createBackupPayload();
-  const jsonStr = JSON.stringify(data, null, 2);
-  const blob = new Blob([jsonStr], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const dateStr = new Date().toISOString().split("T")[0];
-  const filename = customName || `bucklist-backup-${dateStr}.json`;
+export function downloadBackupFile(customName?: string): boolean {
+  try {
+    const data = createBackupPayload();
+    const jsonStr = JSON.stringify(data, null, 2);
+    const dateStr = new Date().toISOString().split("T")[0];
+    const filename = customName || `bucklist-backup-${dateStr}.json`;
 
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+    const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.setAttribute("download", filename);
+    link.rel = "noopener";
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+
+    // Defer revocation so mobile browsers have time to read the stream
+    setTimeout(() => {
+      try {
+        if (link.parentNode) {
+          document.body.removeChild(link);
+        }
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore
+      }
+    }, 60000);
+
+    return true;
+  } catch (err) {
+    console.error("Backup download error:", err);
+    try {
+      const data = createBackupPayload();
+      const jsonStr = JSON.stringify(data, null, 2);
+      const dateStr = new Date().toISOString().split("T")[0];
+      const filename = customName || `bucklist-backup-${dateStr}.json`;
+      const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(jsonStr);
+      const link = document.createElement("a");
+      link.href = dataUri;
+      link.download = filename;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) {
+          document.body.removeChild(link);
+        }
+      }, 10000);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 function sanitizeMovieItem(item: any): WatchlistMovie | null {
@@ -304,14 +345,110 @@ function sanitizeMovieItem(item: any): WatchlistMovie | null {
   };
 }
 
+export function robustParseJson(rawInput: string): any {
+  if (!rawInput || typeof rawInput !== "string") {
+    throw new Error("The provided JSON text is empty.");
+  }
+
+  let text = rawInput.trim();
+
+  // 1. Direct standard parse
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Continue to sanitize
+  }
+
+  // 2. Strip UTF Byte Order Mark (BOM), zero-width characters, and normalize spaces
+  text = text
+    .replace(/^\uFEFF/, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ");
+
+  // 3. Remove Markdown code block wrappers (e.g. ```json ... ``` or ``` ... ```)
+  text = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+
+  try {
+    return JSON.parse(text.trim());
+  } catch {
+    // Continue
+  }
+
+  // 4. Replace smart / curly quotes with standard ASCII quotes
+  let sanitized = text
+    .replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, '"');
+
+  // Replace full-width colons, commas, brackets that messaging apps/keyboards insert
+  sanitized = sanitized
+    .replace(/：/g, ":")
+    .replace(/，/g, ",")
+    .replace(/｛/g, "{")
+    .replace(/｝/g, "}")
+    .replace(/［/g, "[")
+    .replace(/］/g, "]");
+
+  try {
+    return JSON.parse(sanitized.trim());
+  } catch {
+    // Continue
+  }
+
+  // 5. Extract JSON object/array block if Telegram or clipboard added header/footer text
+  // e.g. "User Name, [16.08.2026 13:24]\n{ ... }" or "[12:34] { ... }"
+  const firstBrace = sanitized.indexOf("{");
+  const firstBracket = sanitized.indexOf("[");
+  let startIndex = -1;
+  let isObject = false;
+
+  if (firstBrace !== -1 && firstBracket !== -1) {
+    if (firstBrace < firstBracket) {
+      startIndex = firstBrace;
+      isObject = true;
+    } else {
+      startIndex = firstBracket;
+      isObject = false;
+    }
+  } else if (firstBrace !== -1) {
+    startIndex = firstBrace;
+    isObject = true;
+  } else if (firstBracket !== -1) {
+    startIndex = firstBracket;
+    isObject = false;
+  }
+
+  if (startIndex !== -1) {
+    const endIndex = isObject ? sanitized.lastIndexOf("}") : sanitized.lastIndexOf("]");
+    if (endIndex > startIndex) {
+      const extracted = sanitized.substring(startIndex, endIndex + 1);
+      try {
+        return JSON.parse(extracted);
+      } catch {
+        // Strip trailing commas before closing braces/brackets
+        const noTrailingCommas = extracted.replace(/,\s*([}\]])/g, "$1");
+        try {
+          return JSON.parse(noTrailingCommas);
+        } catch {
+          // Continue
+        }
+      }
+    }
+  }
+
+  // 6. Last attempt: strip trailing commas on full sanitized string
+  const finalClean = sanitized.replace(/,\s*([}\]])/g, "$1");
+  return JSON.parse(finalClean.trim());
+}
+
 export function validateAndParseBackupJson(jsonString: string): ImportValidationResult {
   try {
-    const trimmed = jsonString.trim();
-    if (!trimmed) {
+    if (!jsonString || !jsonString.trim()) {
       return { valid: false, error: "The provided JSON string is empty." };
     }
 
-    const parsed = JSON.parse(trimmed);
+    const parsed = robustParseJson(jsonString);
 
     let rawWatchlist: any[] = [];
     let rawTvProgress: any = {};

@@ -2,6 +2,7 @@ import type {
   WatchlistMovie,
   BucklistBackupData,
   ImportValidationResult,
+  MovieCollection,
 } from "../types";
 import { normalizePlatformsList } from "./api";
 
@@ -101,7 +102,7 @@ export function updateSeriesSeasonRating(
   saveLocalTvProgress(all);
 }
 
-export type ViewMode = "detailed" | "compact" | "grid" | "timeline";
+export type ViewMode = "detailed" | "compact" | "grid" | "timeline" | "collections";
 export type WatchedViewMode = ViewMode;
 export type ToWatchViewMode = "detailed" | "compact" | "grid";
 export type TimelinePeriod = "month" | "week" | "year";
@@ -156,7 +157,7 @@ export function saveLocalWatchedCategory(cat: WatchedCategory): void {
 export function getLocalWatchedViewMode(): WatchedViewMode {
   try {
     const raw = localStorage.getItem(WATCHED_VIEW_MODE_KEY);
-    if (raw === "detailed" || raw === "compact" || raw === "grid" || raw === "timeline") {
+    if (raw === "detailed" || raw === "compact" || raw === "grid" || raw === "timeline" || raw === "collections") {
       return raw;
     }
   } catch {
@@ -204,6 +205,14 @@ export function createBackupPayload(): BucklistBackupData {
   const watchedViewMode = getLocalWatchedViewMode();
   const watchedCategory = getLocalWatchedCategory();
 
+  let collections: MovieCollection[] = [];
+  try {
+    const raw = localStorage.getItem("bucklist_collections_v1");
+    if (raw) collections = JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+
   const toWatchCount = watchlist.filter((m) => !m.watched).length;
   const watchedCount = watchlist.filter((m) => m.watched).length;
   const tvTrackedCount = Object.keys(tvProgress).length;
@@ -213,6 +222,7 @@ export function createBackupPayload(): BucklistBackupData {
     appName: "Bucklist",
     exportedAt: new Date().toISOString(),
     watchlist,
+    collections,
     tvProgress,
     preferences: {
       toWatchViewMode,
@@ -224,6 +234,7 @@ export function createBackupPayload(): BucklistBackupData {
       toWatchCount,
       watchedCount,
       tvTrackedCount,
+      collectionsCount: collections.length,
     },
   };
 }

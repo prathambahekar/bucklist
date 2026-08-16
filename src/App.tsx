@@ -27,6 +27,8 @@ import {
   Clock,
   Settings,
   CheckSquare,
+  Layers,
+  FolderPlus,
 } from "lucide-react";
 import {
   getLocalWatchlist,
@@ -49,6 +51,10 @@ import {
   TvProgressMap,
 } from "./lib/storage";
 import {
+  getLocalCollections,
+  saveLocalCollections,
+} from "./lib/collections";
+import {
   searchMovies,
   getPosterUrl,
   getBackdropUrl,
@@ -63,6 +69,8 @@ import { DatePickerPopover } from "./components/DatePickerPopover";
 import { WatchVenuePopover, WatchVenueType } from "./components/WatchVenuePopover";
 import { SettingsView } from "./components/SettingsView";
 import { WatchedTimelineView } from "./components/WatchedTimelineView";
+import { CollectionsView } from "./components/CollectionsView";
+import { AddToCollectionModal } from "./components/AddToCollectionModal";
 import { SearchAddDrawer } from "./components/SearchAddDrawer";
 import { NotificationPopover } from "./components/NotificationPopover";
 import { SwipeableMovieCard } from "./components/SwipeableMovieCard";
@@ -72,6 +80,7 @@ import type {
   SearchResult,
   MovieDetailExtra,
   TabType,
+  MovieCollection,
 } from "./types";
 
 function getLocalTodayString(): string {
@@ -130,9 +139,34 @@ export default function App() {
     getLocalWatchedCategory()
   );
 
+  // Collections state
+  const [customCollections, setCustomCollections] = useState<MovieCollection[]>(() =>
+    getLocalCollections()
+  );
+  const [addToCollectionMovie, setAddToCollectionMovie] = useState<WatchlistMovie | null>(null);
+
   // Batch Multi-Select Mode State
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [selectedMovieIds, setSelectedMovieIds] = useState<string[]>([]);
+  const longPressTimerRef = useRef<number | null>(null);
+
+  const handleLongPressStart = useCallback((id: string) => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => {
+      setIsBatchMode(true);
+      setSelectedMovieIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500);
+  }, []);
+
+  const handleLongPressStop = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
 
   const handleSetToWatchViewMode = useCallback((mode: ToWatchViewMode) => {
     setToWatchViewMode(mode);
@@ -924,6 +958,7 @@ export default function App() {
     Boolean(activeTvDrawerMovie) ||
     Boolean(detailMovie) ||
     Boolean(watchedModalMovie) ||
+    Boolean(addToCollectionMovie) ||
     genreModalOpen;
 
   return (
@@ -989,12 +1024,16 @@ export default function App() {
             {/* Section Header & View Options Toolbar */}
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm sm:text-base font-bold text-zinc-200">
-                  {tab === "watched" ? "Watched" : "Watchlist"}
-                </h2>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
-                  {tab === "watched" ? displayWatched.length : displayMovies.length}
-                </span>
+                {tab !== "watched" && (
+                  <>
+                    <h2 className="text-sm sm:text-base font-bold text-zinc-200">
+                      Watchlist
+                    </h2>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
+                      {displayMovies.length}
+                    </span>
+                  </>
+                )}
 
                 {/* Filter Toggle Button */}
                 <button
@@ -1027,7 +1066,7 @@ export default function App() {
                       setIsBatchMode(true);
                     }
                   }}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                     isBatchMode
                       ? "bg-amber-500 text-zinc-950 font-bold border-amber-400 shadow-xs"
                       : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
@@ -1120,6 +1159,23 @@ export default function App() {
                   >
                     <CalendarDays className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Timeline</span>
+                  </button>
+                )}
+
+                {tab === "watched" && (
+                  <button
+                    type="button"
+                    id="view-opt-collections"
+                    onClick={() => handleSetWatchedViewMode("collections")}
+                    className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                      watchedViewMode === "collections"
+                        ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+                    }`}
+                    title="Franchises & Collections"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Collections</span>
                   </button>
                 )}
               </div>
@@ -1299,12 +1355,20 @@ export default function App() {
           </div>
         )}
 
-        {/* Main Movie List or Timeline View */}
+        {/* Main Movie List or Timeline or Collections View */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-amber-500">
             <Loader2 className="w-8 h-8 animate-spin" />
             <p className="text-sm text-zinc-400">Loading your watchlist...</p>
           </div>
+        ) : tab === "watched" && watchedViewMode === "collections" ? (
+          <CollectionsView
+            watchlist={[...movies, ...watched]}
+            customCollections={customCollections}
+            onCollectionsChange={(newCols) => setCustomCollections(newCols)}
+            onMovieClick={(item) => setDetailMovie(item)}
+            onMarkWatched={(item) => handleOpenWatchedModal(item, item.rating || 5)}
+          />
         ) : tab === "watched" && watchedViewMode === "timeline" ? (
           <WatchedTimelineView
             items={displayWatched}
@@ -1442,6 +1506,12 @@ export default function App() {
                             setDetailMovie(item);
                           }
                         }}
+                        onTouchStart={() => handleLongPressStart(item.id)}
+                        onTouchEnd={handleLongPressStop}
+                        onTouchMove={handleLongPressStop}
+                        onMouseDown={() => handleLongPressStart(item.id)}
+                        onMouseUp={handleLongPressStop}
+                        onMouseLeave={handleLongPressStop}
                         className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-2 sm:p-2.5 flex flex-col transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative h-full ${
                           isSelected
                             ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
@@ -1640,6 +1710,12 @@ export default function App() {
                             setDetailMovie(item);
                           }
                         }}
+                        onTouchStart={() => handleLongPressStart(item.id)}
+                        onTouchEnd={handleLongPressStop}
+                        onTouchMove={handleLongPressStop}
+                        onMouseDown={() => handleLongPressStart(item.id)}
+                        onMouseUp={handleLongPressStop}
+                        onMouseLeave={handleLongPressStop}
                         className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-xl p-2 sm:p-2.5 flex items-center gap-2.5 sm:gap-3 transition-all duration-150 shadow-2xs hover:shadow-md cursor-pointer relative ${
                           isSelected
                             ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
@@ -1815,6 +1891,12 @@ export default function App() {
                           setDetailMovie(item);
                         }
                       }}
+                      onTouchStart={() => handleLongPressStart(item.id)}
+                      onTouchEnd={handleLongPressStop}
+                      onTouchMove={handleLongPressStop}
+                      onMouseDown={() => handleLongPressStart(item.id)}
+                      onMouseUp={handleLongPressStop}
+                      onMouseLeave={handleLongPressStop}
                       className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-3.5 sm:p-4 flex gap-3.5 sm:gap-4 transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative ${
                         isSelected
                           ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
@@ -2202,6 +2284,17 @@ export default function App() {
                           <Bookmark className="w-3 h-3" />
                           <span>Undo Watched</span>
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddToCollectionMovie(detailMovie as WatchlistMovie);
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-300 hover:text-amber-400 bg-zinc-800/80 hover:bg-zinc-750 px-2 py-0.5 rounded-md border border-zinc-700 transition-colors cursor-pointer"
+                          title="Add to custom collection"
+                        >
+                          <FolderPlus className="w-3 h-3 text-amber-400" />
+                          <span>Collection</span>
+                        </button>
                       </div>
                     )}
 
@@ -2219,6 +2312,17 @@ export default function App() {
                             <span>Mark as Watched</span>
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddToCollectionMovie(detailMovie as WatchlistMovie);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-amber-400 border border-zinc-800 text-xs font-semibold transition-colors cursor-pointer"
+                          title="Add to custom collection"
+                        >
+                          <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Collection</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -2563,6 +2667,16 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Add To Collection Modal */}
+      <AddToCollectionModal
+        movie={addToCollectionMovie}
+        isOpen={Boolean(addToCollectionMovie)}
+        onClose={() => setAddToCollectionMovie(null)}
+        onCollectionsUpdated={() => {
+          setCustomCollections(getLocalCollections());
+        }}
+      />
     </div>
   );
 }

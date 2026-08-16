@@ -74,14 +74,28 @@ export interface TvSeriesDetails {
 
 export type TabType = "towatch" | "watched" | "settings";
 export type SortByType = "newest" | "rating" | "release";
-export type ViewMode = "detailed" | "compact" | "grid" | "timeline";
+export type ViewMode = "detailed" | "compact" | "grid" | "timeline" | "collections";
+export type WatchedViewMode = "detailed" | "compact" | "grid" | "timeline" | "collections";
+export type ToWatchViewMode = "detailed" | "compact" | "grid";
 export type TimelinePeriod = "month" | "week" | "year";
+
+export interface MovieCollection {
+  id: string;
+  name: string;
+  description?: string;
+  movie_ids: string[]; // references WatchlistMovie.id
+  created_at: string;
+  updated_at: string;
+  is_custom?: boolean;
+  cover_poster?: string | null;
+}
 
 export interface BucklistBackupData {
   version: string;
   appName?: string;
   exportedAt: string;
   watchlist: WatchlistMovie[];
+  collections?: MovieCollection[];
   tvProgress?: Record<
     number,
     {
@@ -93,7 +107,7 @@ export interface BucklistBackupData {
   >;
   preferences?: {
     toWatchViewMode?: "detailed" | "compact" | "grid";
-    watchedViewMode?: "detailed" | "compact" | "grid" | "timeline";
+    watchedViewMode?: "detailed" | "compact" | "grid" | "timeline" | "collections";
     watchedCategory?: "all" | "movies" | "series" | "anime";
     timelinePeriod?: TimelinePeriod;
   };
@@ -102,6 +116,7 @@ export interface BucklistBackupData {
     toWatchCount: number;
     watchedCount: number;
     tvTrackedCount: number;
+    collectionsCount?: number;
   };
 }
 

@@ -4,26 +4,12 @@ import {
   Film,
   Sparkles,
   Star,
-  Layers,
   Award,
   Flame,
   ChevronDown,
   ChevronUp,
   BarChart2,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  CartesianGrid,
-} from "recharts";
 import type { WatchlistMovie } from "../types";
 import type { TvProgressMap } from "../lib/storage";
 
@@ -34,20 +20,20 @@ interface StatsViewProps {
   onNavigateToWatchlist?: () => void;
 }
 
-const TYPE_COLORS = {
-  movies: "#f59e0b", // Amber 500
-  series: "#3b82f6", // Blue 500
-  anime: "#ec4899", // Pink 500
+const TYPE_COLORS: Record<string, string> = {
+  Movies: "#f59e0b", // Amber 500
+  "TV Series": "#3b82f6", // Blue 500
+  Anime: "#ec4899", // Pink 500
 };
 
 export const StatsView: React.FC<StatsViewProps> = ({
   watched,
-  movies,
   tvProgressMap,
   onNavigateToWatchlist,
 }) => {
   const [timeFilter, setTimeFilter] = useState<"all" | "year" | "month" | "week">("all");
   const [chartsExpanded, setChartsExpanded] = useState<boolean>(false);
+  const [hoveredDonutIdx, setHoveredDonutIdx] = useState<number | null>(null);
 
   const isItemAnime = (item: WatchlistMovie) => {
     return (
@@ -70,8 +56,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
     const now = new Date();
     const currentYear = now.getFullYear().toString();
     const currentMonth = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    
-    // 7 days cutoff (YYYY-MM-DD)
+
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
 
@@ -118,7 +103,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
         movieCount += 1;
       }
 
-      // Time estimation:
       if (isTv || isAnime) {
         const progress = tvProgressMap[item.tmdb_id];
         const epCount = progress?.watchedEpisodes?.length || 0;
@@ -134,7 +118,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
         totalEstimatedMinutes += 110;
       }
 
-      // Ratings
       if (item.rating && item.rating > 0) {
         totalRatingSum += item.rating;
         ratedCount += 1;
@@ -144,7 +127,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
         }
       }
 
-      // Genres
       (item.genres || []).forEach((g) => {
         if (!genreScores[g]) {
           genreScores[g] = { totalRating: 0, count: 0 };
@@ -155,7 +137,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
         }
       });
 
-      // Venue / Platform
       const venue = item.watched_source || "ott";
       let venueKey = "OTT";
       if (venue === "theatre") {
@@ -167,7 +148,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
       }
       platformCounts[venueKey] = (platformCounts[venueKey] || 0) + 1;
 
-      // Monthly Activity
       if (item.watched_date) {
         const monthKey = item.watched_date.slice(0, 7);
         monthlyActivity[monthKey] = (monthlyActivity[monthKey] || 0) + 1;
@@ -177,7 +157,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
     const totalHours = Math.round(totalEstimatedMinutes / 60);
     const avgRating = ratedCount > 0 ? (totalRatingSum / ratedCount).toFixed(1) : "—";
 
-    // Top genres by average rating
     const genreArray = Object.entries(genreScores).map(([name, data]) => ({
       name,
       count: data.count,
@@ -191,20 +170,20 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
     const mostWatchedGenres = [...genreArray]
       .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
+      .slice(0, 5);
 
     const typeDistribution = [
-      { name: "Movies", value: movieCount, color: TYPE_COLORS.movies },
-      { name: "TV Series", value: seriesCount, color: TYPE_COLORS.series },
-      { name: "Anime", value: animeCount, color: TYPE_COLORS.anime },
+      { name: "Movies", value: movieCount, color: TYPE_COLORS.Movies },
+      { name: "TV Series", value: seriesCount, color: TYPE_COLORS["TV Series"] },
+      { name: "Anime", value: animeCount, color: TYPE_COLORS.Anime },
     ].filter((t) => t.value > 0);
 
     const ratingHistogram = [
-      { stars: "5★", count: ratingDist[5] },
-      { stars: "4★", count: ratingDist[4] },
-      { stars: "3★", count: ratingDist[3] },
-      { stars: "2★", count: ratingDist[2] },
-      { stars: "1★", count: ratingDist[1] },
+      { stars: "5★", count: ratingDist[5], color: "#10b981" },
+      { stars: "4★", count: ratingDist[4], color: "#3b82f6" },
+      { stars: "3★", count: ratingDist[3], color: "#f59e0b" },
+      { stars: "2★", count: ratingDist[2], color: "#f97316" },
+      { stars: "1★", count: ratingDist[1], color: "#ef4444" },
     ];
 
     return {
@@ -248,6 +227,15 @@ export const StatsView: React.FC<StatsViewProps> = ({
       </div>
     );
   }
+
+  // Calculate SVG Donut Segments
+  const totalTypeCount = statsSummary.typeDistribution.reduce((acc, curr) => acc + curr.value, 0);
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  let accumulatedOffset = 0;
+
+  const maxHistCount = Math.max(1, ...statsSummary.ratingHistogram.map((h) => h.count));
+  const maxGenreCount = Math.max(1, ...statsSummary.mostWatchedGenres.map((g) => g.count));
 
   return (
     <div id="stats-dashboard" className="w-full space-y-2.5 animate-in fade-in duration-200">
@@ -373,44 +361,71 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 <span className="text-[9.5px] text-zinc-500">Breakdown</span>
               </div>
 
-              <div className="h-44 w-full flex items-center justify-center">
+              <div className="h-44 w-full flex flex-col items-center justify-center">
                 {statsSummary.typeDistribution.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statsSummary.typeDistribution}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={36}
-                        outerRadius={60}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {statsSummary.typeDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} stroke="#18181b" strokeWidth={2} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        cursor={{ fill: "transparent" }}
-                        contentStyle={{
-                          backgroundColor: "#09090b",
-                          borderColor: "#27272a",
-                          borderRadius: "8px",
-                          fontSize: "11px",
-                          color: "#f4f4f5",
-                          padding: "4px 8px",
-                        }}
-                        formatter={(value: any, name: any) => [`${value} titles`, name]}
-                      />
-                      <Legend
-                        verticalAlign="bottom"
-                        height={28}
-                        formatter={(value) => (
-                          <span className="text-[11px] text-zinc-300 font-medium">{value}</span>
-                        )}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <div className="w-full flex items-center justify-around gap-2">
+                    {/* Native SVG Donut */}
+                    <div className="relative w-28 h-28 flex items-center justify-center">
+                      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                        {statsSummary.typeDistribution.map((item, idx) => {
+                          const percent = item.value / totalTypeCount;
+                          const dashLength = percent * circumference;
+                          const offset = accumulatedOffset;
+                          accumulatedOffset += dashLength;
+                          const isHovered = hoveredDonutIdx === idx;
+
+                          return (
+                            <circle
+                              key={item.name}
+                              cx="50"
+                              cy="50"
+                              r={radius}
+                              fill="transparent"
+                              stroke={item.color}
+                              strokeWidth={isHovered ? "14" : "11"}
+                              strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+                              strokeDashoffset={-offset}
+                              className="transition-all duration-200 cursor-pointer"
+                              onMouseEnter={() => setHoveredDonutIdx(idx)}
+                              onMouseLeave={() => setHoveredDonutIdx(null)}
+                            />
+                          );
+                        })}
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                        <span className="text-base font-extrabold text-zinc-100 leading-none">
+                          {totalTypeCount}
+                        </span>
+                        <span className="text-[9px] text-zinc-400 font-semibold uppercase">
+                          Titles
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Legend */}
+                    <div className="space-y-1.5 text-xs">
+                      {statsSummary.typeDistribution.map((item, idx) => {
+                        const pct = Math.round((item.value / totalTypeCount) * 100);
+                        return (
+                          <div
+                            key={item.name}
+                            onMouseEnter={() => setHoveredDonutIdx(idx)}
+                            onMouseLeave={() => setHoveredDonutIdx(null)}
+                            className={`flex items-center gap-2 px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+                              hoveredDonutIdx === idx ? "bg-zinc-800/80" : ""
+                            }`}
+                          >
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="text-zinc-300 font-medium">{item.name}</span>
+                            <span className="text-zinc-500 font-semibold ml-auto">{item.value} ({pct}%)</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-xs text-zinc-500">No data available</p>
                 )}
@@ -429,47 +444,29 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 <span className="text-[9.5px] text-zinc-500">Average Stars</span>
               </div>
 
-              <div className="h-44 w-full">
+              <div className="h-44 w-full flex flex-col justify-center gap-2 px-1">
                 {statsSummary.topRatedGenres.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={statsSummary.topRatedGenres}
-                      layout="vertical"
-                      margin={{ top: 2, right: 20, left: -10, bottom: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-                      <XAxis type="number" domain={[0, 5]} tick={{ fill: "#71717a", fontSize: 9 }} />
-                      <YAxis
-                        type="category"
-                        dataKey="name"
-                        tick={{ fill: "#d4d4d8", fontSize: 10 }}
-                        width={65}
-                      />
-                      <Tooltip
-                        cursor={{ fill: "rgba(255, 255, 255, 0.05)" }}
-                        contentStyle={{
-                          backgroundColor: "#09090b",
-                          borderColor: "#27272a",
-                          borderRadius: "8px",
-                          fontSize: "11px",
-                          color: "#f4f4f5",
-                          padding: "4px 8px",
-                        }}
-                        formatter={(value: any, _: any, item: any) => [
-                          `${value} ★ (${item.payload.count} titles)`,
-                          "Avg Rating",
-                        ]}
-                      />
-                      <Bar dataKey="avgRating" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={12}>
-                        {statsSummary.topRatedGenres.map((_, index) => (
-                          <Cell
-                            key={`genre-cell-${index}`}
-                            fill={index === 0 ? "#fbbf24" : index === 1 ? "#f59e0b" : "#d97706"}
+                  statsSummary.topRatedGenres.map((genre) => {
+                    const widthPct = Math.min(100, Math.max(10, (genre.avgRating / 5) * 100));
+                    return (
+                      <div key={genre.name} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-300 font-medium truncate max-w-[130px]">
+                            {genre.name}
+                          </span>
+                          <span className="text-amber-400 font-bold flex items-center gap-1">
+                            {genre.avgRating}★ <span className="text-[10px] text-zinc-500 font-normal">({genre.count})</span>
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-zinc-800/80 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-300"
+                            style={{ width: `${widthPct}%` }}
                           />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                        </div>
+                      </div>
+                    );
+                  })
                 ) : (
                   <div className="h-full flex items-center justify-center text-xs text-zinc-500">
                     Rate items to view top genres
@@ -493,37 +490,29 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 <span className="text-[9.5px] text-zinc-500">By Count</span>
               </div>
 
-              <div className="h-40 w-full">
+              <div className="h-40 w-full flex flex-col justify-center gap-2 px-1">
                 {statsSummary.mostWatchedGenres.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={statsSummary.mostWatchedGenres}
-                      margin={{ top: 5, right: 5, left: -25, bottom: 15 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fill: "#a1a1aa", fontSize: 9 }}
-                        interval={0}
-                        angle={-15}
-                        textAnchor="end"
-                      />
-                      <YAxis tick={{ fill: "#71717a", fontSize: 9 }} allowDecimals={false} />
-                      <Tooltip
-                        cursor={{ fill: "rgba(255, 255, 255, 0.05)" }}
-                        contentStyle={{
-                          backgroundColor: "#09090b",
-                          borderColor: "#27272a",
-                          borderRadius: "8px",
-                          fontSize: "11px",
-                          color: "#f4f4f5",
-                          padding: "4px 8px",
-                        }}
-                        formatter={(value: any) => [`${value} titles`, "Count"]}
-                      />
-                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={18} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  statsSummary.mostWatchedGenres.map((genre) => {
+                    const widthPct = Math.min(100, Math.max(12, (genre.count / maxGenreCount) * 100));
+                    return (
+                      <div key={genre.name} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-300 font-medium truncate max-w-[150px]">
+                            {genre.name}
+                          </span>
+                          <span className="text-blue-400 font-bold text-[11px]">
+                            {genre.count} {genre.count === 1 ? "title" : "titles"}
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-zinc-800/80 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 rounded-full transition-all duration-300"
+                            style={{ width: `${widthPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
                 ) : (
                   <div className="h-full flex items-center justify-center text-xs text-zinc-500">
                     No genre data available
@@ -544,47 +533,29 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 <span className="text-[9.5px] text-zinc-500">Distribution</span>
               </div>
 
-              <div className="h-40 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={statsSummary.ratingHistogram}
-                    margin={{ top: 5, right: 5, left: -25, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="stars" tick={{ fill: "#e4e4e7", fontSize: 10, fontWeight: "bold" }} />
-                    <YAxis tick={{ fill: "#71717a", fontSize: 9 }} allowDecimals={false} />
-                    <Tooltip
-                      cursor={{ fill: "rgba(255, 255, 255, 0.05)" }}
-                      contentStyle={{
-                        backgroundColor: "#09090b",
-                        borderColor: "#27272a",
-                        borderRadius: "8px",
-                        fontSize: "11px",
-                        color: "#f4f4f5",
-                        padding: "4px 8px",
-                      }}
-                      formatter={(value: any) => [`${value} ratings`, "Titles"]}
-                    />
-                    <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20}>
-                      {statsSummary.ratingHistogram.map((entry, idx) => (
-                        <Cell
-                          key={`hist-${idx}`}
-                          fill={
-                            entry.stars.startsWith("5")
-                              ? "#10b981"
-                              : entry.stars.startsWith("4")
-                              ? "#3b82f6"
-                              : entry.stars.startsWith("3")
-                              ? "#f59e0b"
-                              : entry.stars.startsWith("2")
-                              ? "#f97316"
-                              : "#ef4444"
-                          }
+              <div className="h-40 w-full flex items-end justify-between gap-3 pt-4 pb-1 px-4">
+                {statsSummary.ratingHistogram.map((item) => {
+                  const heightPct = item.count > 0 ? Math.max(15, (item.count / maxHistCount) * 100) : 4;
+                  return (
+                    <div key={item.stars} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
+                      <span className="text-[10px] font-semibold text-zinc-400 group-hover:text-zinc-200 transition-colors">
+                        {item.count}
+                      </span>
+                      <div className="w-full max-w-[28px] h-24 bg-zinc-800/40 rounded-t-md flex items-end overflow-hidden">
+                        <div
+                          className="w-full rounded-t-md transition-all duration-300 group-hover:brightness-125"
+                          style={{
+                            height: `${heightPct}%`,
+                            backgroundColor: item.color,
+                          }}
                         />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                      </div>
+                      <span className="text-[11px] font-bold text-zinc-300">
+                        {item.stars}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

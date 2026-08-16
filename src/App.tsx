@@ -149,9 +149,16 @@ export default function App() {
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [selectedMovieIds, setSelectedMovieIds] = useState<string[]>([]);
   const longPressTimerRef = useRef<number | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
-  const handleLongPressStart = useCallback((id: string) => {
+  const handleLongPressStart = useCallback((id: string, touchEvent?: React.TouchEvent) => {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    if (touchEvent && touchEvent.touches.length > 0) {
+      touchStartPosRef.current = {
+        x: touchEvent.touches[0].clientX,
+        y: touchEvent.touches[0].clientY,
+      };
+    }
     longPressTimerRef.current = window.setTimeout(() => {
       setIsBatchMode(true);
       setSelectedMovieIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -161,7 +168,21 @@ export default function App() {
     }, 500);
   }, []);
 
+  const handleLongPressMove = useCallback((e: React.TouchEvent) => {
+    if (touchStartPosRef.current && e.touches.length > 0) {
+      const diffX = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x);
+      const diffY = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y);
+      if (diffX > 10 || diffY > 10) {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      }
+    }
+  }, []);
+
   const handleLongPressStop = useCallback(() => {
+    touchStartPosRef.current = null;
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -1506,9 +1527,10 @@ export default function App() {
                             setDetailMovie(item);
                           }
                         }}
-                        onTouchStart={() => handleLongPressStart(item.id)}
+                        onTouchStart={(e) => handleLongPressStart(item.id, e)}
                         onTouchEnd={handleLongPressStop}
-                        onTouchMove={handleLongPressStop}
+                        onTouchMove={handleLongPressMove}
+                        onTouchCancel={handleLongPressStop}
                         onMouseDown={() => handleLongPressStart(item.id)}
                         onMouseUp={handleLongPressStop}
                         onMouseLeave={handleLongPressStop}
@@ -1710,9 +1732,10 @@ export default function App() {
                             setDetailMovie(item);
                           }
                         }}
-                        onTouchStart={() => handleLongPressStart(item.id)}
+                        onTouchStart={(e) => handleLongPressStart(item.id, e)}
                         onTouchEnd={handleLongPressStop}
-                        onTouchMove={handleLongPressStop}
+                        onTouchMove={handleLongPressMove}
+                        onTouchCancel={handleLongPressStop}
                         onMouseDown={() => handleLongPressStart(item.id)}
                         onMouseUp={handleLongPressStop}
                         onMouseLeave={handleLongPressStop}
@@ -1891,9 +1914,10 @@ export default function App() {
                           setDetailMovie(item);
                         }
                       }}
-                      onTouchStart={() => handleLongPressStart(item.id)}
+                      onTouchStart={(e) => handleLongPressStart(item.id, e)}
                       onTouchEnd={handleLongPressStop}
-                      onTouchMove={handleLongPressStop}
+                      onTouchMove={handleLongPressMove}
+                      onTouchCancel={handleLongPressStop}
                       onMouseDown={() => handleLongPressStart(item.id)}
                       onMouseUp={handleLongPressStop}
                       onMouseLeave={handleLongPressStop}

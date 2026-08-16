@@ -66,10 +66,10 @@ export const AddToCollectionModal: React.FC<AddToCollectionModalProps> = ({
     >
       <div
         id="add-to-collection-modal"
-        className="w-full max-w-md mx-auto bg-zinc-950 sm:bg-zinc-900 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+        className="w-full max-w-md mx-auto bg-zinc-950 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-4 sm:hidden" />
+        <div className="w-12 h-1.5 bg-zinc-800 rounded-full mx-auto mb-4 sm:hidden" />
 
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-4">
           <div className="flex items-center gap-2">
@@ -86,7 +86,7 @@ export const AddToCollectionModal: React.FC<AddToCollectionModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>

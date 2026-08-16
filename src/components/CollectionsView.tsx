@@ -20,6 +20,7 @@ import {
 import type { WatchlistMovie, MovieCollection } from "../types";
 import {
   getAllComputedCollections,
+  getLocalCollections,
   createCustomCollection,
   updateCustomCollection,
   deleteCustomCollection,
@@ -58,6 +59,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
 
   // Add movies to existing collection modal state
   const [isAddMoviesPickerOpen, setIsAddMoviesPickerOpen] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   // Compute all collections
   const computedCollections = useMemo(() => {
@@ -127,25 +129,18 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
       );
     }
 
-    // Refresh custom collections
-    const raw = localStorage.getItem("bucklist_collections_v1");
-    if (raw) {
-      onCollectionsChange(JSON.parse(raw));
-    }
+    // Refresh custom collections via helper
+    onCollectionsChange(getLocalCollections());
     setIsCreateModalOpen(false);
   };
 
-  // Handle delete collection
-  const handleDeleteCollection = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this collection?")) {
-      deleteCustomCollection(id);
-      const raw = localStorage.getItem("bucklist_collections_v1");
-      if (raw) {
-        onCollectionsChange(JSON.parse(raw));
-      }
-      if (selectedCollectionId === id) {
-        setSelectedCollectionId(null);
-      }
+  // Handle delete collection safely
+  const handleExecuteDeleteCollection = (id: string) => {
+    deleteCustomCollection(id);
+    onCollectionsChange(getLocalCollections());
+    setIsConfirmingDelete(false);
+    if (selectedCollectionId === id) {
+      setSelectedCollectionId(null);
     }
   };
 
@@ -153,10 +148,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
   const handleRemoveMovieFromCol = (movieId: string) => {
     if (!activeCollection?.rawCollection) return;
     removeMovieFromCollection(activeCollection.rawCollection.id, movieId);
-    const raw = localStorage.getItem("bucklist_collections_v1");
-    if (raw) {
-      onCollectionsChange(JSON.parse(raw));
-    }
+    onCollectionsChange(getLocalCollections());
   };
 
   // Handle add movie to active custom collection
@@ -168,13 +160,11 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
     } else {
       addMovieToCollection(activeCollection.rawCollection.id, movieId);
     }
-    const raw = localStorage.getItem("bucklist_collections_v1");
-    if (raw) {
-      onCollectionsChange(JSON.parse(raw));
-    }
+    onCollectionsChange(getLocalCollections());
   };
 
   const formatDuration = (mins: number) => {
+    if (!mins || mins <= 0) return "N/A";
     const hours = Math.floor(mins / 60);
     const m = mins % 60;
     if (hours === 0) return `${m}m`;
@@ -292,138 +282,147 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
           {filteredCollections.map((col) => {
-            const isCompleted = col.totalMovies > 0 && col.watchedMoviesCount === col.totalMovies;
+            const isAllWatched = col.displayTotalCount > 0 && col.watchedMoviesCount === col.displayTotalCount;
             return (
               <div
                 key={col.id}
                 id={`collection-card-${col.id}`}
                 onClick={() => setSelectedCollectionId(col.id)}
-                className="group relative bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/90 hover:border-zinc-700/90 rounded-2xl p-4 transition-all duration-200 shadow-sm hover:shadow-lg flex flex-col justify-between cursor-pointer"
+                className="group relative bg-[#18181b] hover:bg-zinc-850 border border-zinc-800/90 hover:border-zinc-700 rounded-xl p-3 transition-all duration-200 shadow-xs hover:shadow-md flex flex-col justify-between cursor-pointer"
               >
                 <div>
-                  {/* Top Poster Deck / Fan-out visual */}
-                  <div className="relative h-44 w-full rounded-xl bg-zinc-950 overflow-hidden mb-3.5 border border-zinc-800/80 flex items-center justify-center">
+                  {/* Compact Poster Showcase */}
+                  <div className="relative h-28 w-full rounded-lg bg-zinc-950 overflow-hidden mb-2.5 border border-zinc-800/80 flex items-center justify-center">
                     {/* Background Ambient Backdrop Blur */}
                     {col.coverPoster && (
                       <img
                         src={getPosterUrl(col.coverPoster) || ""}
                         alt=""
-                        className="absolute inset-0 w-full h-full object-cover blur-xl opacity-25 scale-110"
+                        className="absolute inset-0 w-full h-full object-cover blur-lg opacity-20 scale-110"
                       />
                     )}
 
                     {/* Stacked Fan-out Posters */}
                     <div className="relative z-10 flex items-center justify-center">
-                      {col.posters.slice(0, 4).map((posterPath, idx) => {
-                        const posterUrl = getPosterUrl(posterPath);
-                        // Fan-out rotations and translations
-                        const offsets = [
-                          { rotate: "-rotate-6", translate: "-translate-x-6", z: "z-10", scale: "scale-95" },
-                          { rotate: "rotate-0", translate: "translate-x-0", z: "z-20", scale: "scale-100" },
-                          { rotate: "rotate-6", translate: "translate-x-6", z: "z-15", scale: "scale-95" },
-                          { rotate: "rotate-12", translate: "translate-x-10", z: "z-5", scale: "scale-90" },
-                        ];
-                        const offset = offsets[idx % offsets.length];
+                      {col.posters.length === 1 ? (
+                        <div className="w-14 h-20 rounded-md overflow-hidden border border-zinc-700/80 shadow-md transition-transform duration-200 group-hover:scale-105">
+                          <img
+                            src={
+                              getPosterUrl(col.posters[0]) ||
+                              "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
+                            }
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : col.posters.length > 1 ? (
+                        col.posters.slice(0, 4).map((posterPath, idx) => {
+                          const posterUrl = getPosterUrl(posterPath);
+                          const count = Math.min(col.posters.length, 4);
+                          let transformClass = "";
+                          let zIndex = "z-10";
 
-                        return (
-                          <div
-                            key={idx}
-                            className={`w-20 h-30 rounded-lg overflow-hidden border border-zinc-700/80 shadow-xl transition-transform duration-300 group-hover:scale-105 ${offset.rotate} ${offset.translate} ${offset.z} shrink-0`}
-                          >
-                            <img
-                              src={
-                                posterUrl ||
-                                "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
-                              }
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        );
-                      })}
+                          if (count === 2) {
+                            transformClass = idx === 0 ? "-rotate-6 -translate-x-2 scale-95" : "rotate-6 translate-x-2 scale-100";
+                            zIndex = idx === 1 ? "z-20" : "z-10";
+                          } else if (count === 3) {
+                            if (idx === 0) transformClass = "-rotate-8 -translate-x-4 scale-90";
+                            if (idx === 1) transformClass = "rotate-0 translate-x-0 scale-100";
+                            if (idx === 2) transformClass = "rotate-8 translate-x-4 scale-95";
+                            zIndex = idx === 1 ? "z-20" : "z-10";
+                          } else {
+                            if (idx === 0) transformClass = "-rotate-8 -translate-x-5 scale-90";
+                            if (idx === 1) transformClass = "-rotate-2 -translate-x-1 scale-95";
+                            if (idx === 2) transformClass = "rotate-4 translate-x-2 scale-100";
+                            if (idx === 3) transformClass = "rotate-10 translate-x-6 scale-90";
+                            zIndex = idx === 2 ? "z-30" : idx === 1 ? "z-20" : "z-10";
+                          }
 
-                      {col.posters.length === 0 && (
+                          return (
+                            <div
+                              key={idx}
+                              className={`w-13 h-19 rounded-md overflow-hidden border border-zinc-700/80 shadow-md transition-transform duration-200 group-hover:scale-105 ${transformClass} ${zIndex} shrink-0 -mr-5 last:mr-0`}
+                            >
+                              <img
+                                src={
+                                  posterUrl ||
+                                  "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
+                                }
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          );
+                        })
+                      ) : (
                         <div className="flex flex-col items-center justify-center text-zinc-600">
-                          <Film className="w-8 h-8 mb-1" />
-                          <span className="text-xs font-medium">Empty collection</span>
+                          <Film className="w-6 h-6 mb-1" />
+                          <span className="text-[10px] font-medium">Empty collection</span>
                         </div>
                       )}
                     </div>
 
-                    {/* Top Badges */}
-                    <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5">
+                    {/* Top Left Badge */}
+                    <div className="absolute top-2 left-2 z-20 flex items-center gap-1">
                       {col.type === "franchise" ? (
-                        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                          <Sparkles className="w-3 h-3" />
+                        <span className="px-1.5 py-0.5 rounded-md bg-zinc-950/85 backdrop-blur-md text-amber-400 border border-amber-500/30 text-[9.5px] font-semibold uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                          <Sparkles className="w-2.5 h-2.5" />
                           Franchise
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                          <Layers className="w-3 h-3" />
+                        <span className="px-1.5 py-0.5 rounded-md bg-zinc-950/85 backdrop-blur-md text-zinc-300 border border-zinc-700/60 text-[9.5px] font-semibold uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                          <Layers className="w-2.5 h-2.5" />
                           Custom
                         </span>
                       )}
                     </div>
 
-                    {/* Completion Pill */}
-                    <div className="absolute top-2.5 right-2.5 z-20">
-                      {isCompleted ? (
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-500 text-zinc-950 font-bold text-[10px] flex items-center gap-1 shadow-sm">
-                          <CheckCircle2 className="w-3 h-3" />
-                          100% Watched
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md bg-zinc-950/80 backdrop-blur-sm text-zinc-300 border border-zinc-700/80 text-[10px] font-semibold">
-                          {col.watchedMoviesCount}/{col.totalMovies} Watched
-                        </span>
-                      )}
+                    {/* Top Right Watched Badge (e.g. 1 / 3 watched) */}
+                    <div className="absolute top-2 right-2 z-20">
+                      <span
+                        className={`px-1.5 py-0.5 rounded-md backdrop-blur-md text-[9.5px] font-semibold shadow-xs flex items-center gap-1 border ${
+                          isAllWatched && col.displayTotalCount > 0
+                            ? "bg-zinc-950/90 text-amber-400 border-amber-500/30"
+                            : "bg-zinc-950/85 text-zinc-300 border-zinc-800"
+                        }`}
+                      >
+                        {col.watchedMoviesCount} / {col.displayTotalCount} watched
+                      </span>
                     </div>
                   </div>
 
                   {/* Title & Description */}
-                  <h3 className="text-base font-bold text-zinc-100 group-hover:text-amber-400 transition-colors line-clamp-1">
+                  <h3 className="text-sm font-bold text-zinc-100 group-hover:text-amber-400 transition-colors line-clamp-1">
                     {col.name}
                   </h3>
                   {col.description && (
-                    <p className="text-xs text-zinc-400 mt-1 line-clamp-1">
+                    <p className="text-[11px] text-zinc-400 mt-0.5 line-clamp-1">
                       {col.description}
                     </p>
                   )}
                 </div>
 
-                {/* Progress Bar & Stats Footer */}
-                <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-2.5">
-                  {/* Progress Bar */}
-                  <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden border border-zinc-800/60">
-                    <div
-                      className={`h-full transition-all duration-300 ${
-                        isCompleted ? "bg-emerald-500" : "bg-amber-500"
-                      }`}
-                      style={{ width: `${col.progressPercent}%` }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-zinc-400 font-medium">
-                    <div className="flex items-center gap-3">
-                      {col.avgRating && (
-                        <span className="flex items-center gap-1 text-amber-400 font-semibold">
-                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                          {col.avgRating} avg
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1 text-zinc-400">
-                        <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                        {formatDuration(col.totalDurationMinutes)}
+                {/* Clean Stats Footer */}
+                <div className="mt-3 pt-2 border-t border-zinc-800/70 flex items-center justify-between text-[11px] text-zinc-400 font-medium">
+                  <div className="flex items-center gap-2.5">
+                    {col.avgRating && (
+                      <span className="flex items-center gap-1 text-amber-400 font-semibold">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        {col.avgRating} avg
                       </span>
-                    </div>
-
-                    <span className="flex items-center gap-1 text-zinc-300 font-semibold group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all">
-                      <span>View</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
+                    )}
+                    <span className="flex items-center gap-1 text-zinc-400">
+                      <Clock className="w-3 h-3 text-zinc-500" />
+                      {formatDuration(col.totalDurationMinutes)}
                     </span>
                   </div>
+
+                  <span className="flex items-center gap-1 text-zinc-300 font-semibold group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all text-xs">
+                    <span>View</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </span>
                 </div>
               </div>
             );
@@ -435,33 +434,30 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
       {activeCollection && (
         <div
           id="collection-details-modal-backdrop"
-          className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[100] flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 animate-in fade-in duration-200"
           onClick={() => setSelectedCollectionId(null)}
         >
           <div
             id="collection-details-modal"
-            className="w-full max-w-2xl max-h-[90vh] mx-auto bg-zinc-950 sm:bg-zinc-900 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden relative animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            className="w-full max-w-2xl max-h-[90vh] mx-auto bg-zinc-950 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden relative animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header Banner */}
-            <div className="relative p-5 sm:p-6 bg-gradient-to-b from-zinc-850 to-zinc-900 border-b border-zinc-800">
-              <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden" />
+            {/* Header Section */}
+            <div className="p-5 sm:p-6 pb-2">
+              <div className="w-12 h-1.5 bg-zinc-800 rounded-full mx-auto mb-3 sm:hidden" />
 
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 mb-2">
                     {activeCollection.type === "franchise" ? (
-                      <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider">
+                      <span className="px-2 py-0.5 rounded-md bg-zinc-900 text-amber-400 border border-amber-500/30 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
                         Franchise
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold uppercase tracking-wider">
+                      <span className="px-2 py-0.5 rounded-md bg-zinc-900 text-zinc-300 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1">
+                        <Layers className="w-3 h-3" />
                         Custom Collection
-                      </span>
-                    )}
-                    {activeCollection.progressPercent === 100 && (
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
-                        100% Completed
                       </span>
                     )}
                   </div>
@@ -479,28 +475,53 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                 <div className="flex items-center gap-1">
                   {activeCollection.isCustom && (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditModal(activeCollection)}
-                        className="p-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-                        title="Edit collection"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCollection(activeCollection.id)}
-                        className="p-2 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 transition-colors"
-                        title="Delete collection"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isConfirmingDelete ? (
+                        <div className="flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/30 rounded-xl px-2 py-1">
+                          <span className="text-[11px] text-rose-300 font-medium">Delete collection?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleExecuteDeleteCollection(activeCollection.id)}
+                            className="px-2 py-0.5 rounded-lg bg-rose-500 hover:bg-rose-400 text-zinc-950 font-bold text-[10px] transition-colors"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsConfirmingDelete(false)}
+                            className="px-1.5 py-0.5 rounded-lg bg-zinc-800 text-zinc-300 hover:text-zinc-100 text-[10px] transition-colors"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(activeCollection)}
+                            className="p-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors"
+                            title="Edit collection"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsConfirmingDelete(true)}
+                            className="p-2 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-zinc-900 transition-colors"
+                            title="Delete collection"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                   <button
                     type="button"
-                    onClick={() => setSelectedCollectionId(null)}
-                    className="p-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                    onClick={() => {
+                      setSelectedCollectionId(null);
+                      setIsConfirmingDelete(false);
+                    }}
+                    className="p-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -508,11 +529,11 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
               </div>
 
               {/* Stats Summary Bar */}
-              <div className="grid grid-cols-3 gap-2 mt-4 p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80 text-center">
+              <div className="grid grid-cols-3 gap-2 mt-4 p-3 rounded-xl bg-zinc-900/70 border border-zinc-800/80 text-center">
                 <div>
                   <p className="text-xs text-zinc-500">Progress</p>
                   <p className="text-sm font-bold text-zinc-100 mt-0.5">
-                    {activeCollection.watchedMoviesCount}/{activeCollection.totalMovies}
+                    {activeCollection.watchedMoviesCount}/{activeCollection.displayTotalCount}
                     <span className="text-xs text-amber-400 font-normal ml-1">
                       ({activeCollection.progressPercent}%)
                     </span>
@@ -535,7 +556,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
             </div>
 
             {/* Collection Movies List */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-2.5">
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 pt-3 space-y-2.5">
               <div className="flex items-center justify-between pb-2">
                 <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
                   Titles in Order ({activeCollection.movies.length})
@@ -661,7 +682,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
         >
           <div
             id="add-movies-picker-modal"
-            className="w-full max-w-lg max-h-[85vh] mx-auto bg-zinc-950 sm:bg-zinc-900 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            className="w-full max-w-lg max-h-[85vh] mx-auto bg-zinc-950 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-3">
@@ -676,7 +697,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddMoviesPickerOpen(false)}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -749,7 +770,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
         >
           <div
             id="create-collection-modal"
-            className="w-full max-w-lg max-h-[90vh] mx-auto bg-zinc-950 sm:bg-zinc-900 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            className="w-full max-w-lg max-h-[90vh] mx-auto bg-zinc-950 border-t sm:border border-zinc-800 rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-4">
@@ -759,7 +780,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsCreateModalOpen(false)}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               >
                 <X className="w-5 h-5" />
               </button>

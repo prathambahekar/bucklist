@@ -1,0 +1,9 @@
+{
+  "appId": "com.bucklist.app",
+  "appName": "Bucklist",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

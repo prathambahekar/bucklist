@@ -154,7 +154,7 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
     };
   }, [isOpen, movie, selectedSeasonNumber, seasonEpisodes, loadError]);
 
-  // Regular seasons (ignoring Specials season 0 unless it's the only one)
+  // Regular seasons (strictly ignoring Specials season 0)
   const regularSeasons = useMemo(() => {
     if (!details?.seasons) return [];
     const valid = details.seasons.filter((s) => s.season_number > 0);
@@ -185,12 +185,29 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
     }
     return fetched || [];
   }, [seasonEpisodes, selectedSeasonNumber, currentSeasonMeta, loadingEpisodes]);
+
+  // Calculate total aired episodes across regular seasons (excluding specials & future un-aired episodes)
   const totalEpisodesCount = useMemo(() => {
     if (!regularSeasons || regularSeasons.length === 0) {
       return details?.number_of_episodes || 0;
     }
-    return regularSeasons.reduce((acc, s) => acc + (s.episode_count || 0), 0);
-  }, [regularSeasons, details]);
+    const today = new Date();
+    let count = 0;
+    for (const season of regularSeasons) {
+      const episodes = seasonEpisodes[season.season_number];
+      if (episodes && episodes.length > 0) {
+        // Count only aired episodes
+        const aired = episodes.filter((ep) => {
+          if (!ep.air_date) return true;
+          return new Date(ep.air_date) <= today;
+        });
+        count += aired.length;
+      } else {
+        count += season.episode_count || 0;
+      }
+    }
+    return count;
+  }, [regularSeasons, seasonEpisodes, details]);
 
   // Calculate watched count across regular seasons
   const totalWatchedCount = useMemo(() => {
@@ -199,7 +216,7 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
 
   const progressPercentage = useMemo(() => {
     if (totalEpisodesCount === 0) return 0;
-    return Math.min(100, Math.round((totalWatchedCount / totalEpisodesCount) * 100));
+    return Math.min(100, Math.round((Math.min(totalWatchedCount, totalEpisodesCount) / totalEpisodesCount) * 100));
   }, [totalWatchedCount, totalEpisodesCount]);
 
   // Calculate auto overall series rating across all rated seasons
@@ -343,7 +360,7 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
   return (
     <div
       id="episode-drawer-backdrop"
-      className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex flex-col justify-end sm:justify-center items-center sm:p-4 transition-all duration-300"
+      className="fixed inset-0 bg-black/85 backdrop-blur-md z-[60] flex flex-col justify-end sm:justify-center items-center sm:p-4 transition-all duration-300"
       onClick={onClose}
     >
       <div
@@ -480,9 +497,30 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
             <span className="text-xs text-zinc-400">Loading series seasons...</span>
           </div>
         ) : loadError ? (
-          <div className="p-8 text-center">
-            <Film className="w-9 h-9 text-zinc-600 mx-auto mb-2.5" />
-            <p className="text-xs text-zinc-400 mb-2">{loadError}</p>
+          <div className="p-8 text-center flex flex-col items-center justify-center">
+            <Film className="w-9 h-9 text-zinc-600 mb-2.5" />
+            <p className="text-xs text-zinc-400 mb-3 max-w-sm">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setLoadError(null);
+                setLoadingDetails(true);
+                fetchTvSeriesDetails(movie.tmdb_id)
+                  .then((data) => {
+                    setDetails(data);
+                    const regular = (data.seasons || []).filter((s: TvSeason) => s.season_number > 0);
+                    const first = regular[0] || data.seasons?.[0];
+                    if (first) setSelectedSeasonNumber(first.season_number);
+                  })
+                  .catch(() => {
+                    setLoadError("Could not find seasons/episodes for this title. It might be a standalone movie or TMDB rate limit.");
+                  })
+                  .finally(() => setLoadingDetails(false));
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 transition-colors cursor-pointer"
+            >
+              Retry Loading
+            </button>
           </div>
         ) : (
           <div className="bg-zinc-950 border-y border-zinc-800/80 px-4 sm:px-6 py-2.5 shrink-0 space-y-2.5">

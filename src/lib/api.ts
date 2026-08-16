@@ -91,13 +91,130 @@ export const getTmdbApiKey = (): string => {
   );
 };
 
+// ==========================================
+// LIGHTWEIGHT IN-MEMORY LRU CACHE
+// ==========================================
+class SimpleLRU<K, V> {
+  private max: number;
+  private cache = new Map<K, { value: V; expiry: number }>();
+  private ttlMs: number;
+
+  constructor(max = 120, ttlMinutes = 15) {
+    this.max = max;
+    this.ttlMs = ttlMinutes * 60 * 1000;
+  }
+
+  get(key: K): V | undefined {
+    const item = this.cache.get(key);
+    if (!item) return undefined;
+    if (Date.now() > item.expiry) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    // Refresh position for LRU
+    this.cache.delete(key);
+    this.cache.set(key, item);
+    return item.value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.max) {
+      // Evict oldest item
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, { value, expiry: Date.now() + this.ttlMs });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+// Caches for TMDB API endpoints to avoid rate limiting
+const providersCache = new SimpleLRU<string, string[]>(150, 30);
+const searchCache = new SimpleLRU<string, SearchResult[]>(80, 10);
+const categoryCache = new SimpleLRU<string, SearchResult[]>(30, 15);
+const tvDetailsCache = new SimpleLRU<number, any>(100, 20);
+const seasonEpisodesCache = new SimpleLRU<string, any>(150, 20);
+let cachedGenreMap: Map<number, string> | null = null;
+
+// Safe fetch with retry on 429 or transient error
+async function fetchWithRetry(url: string, retries = 2, delayMs = 300): Promise<Response> {
+  try {
+    const res = await fetch(url);
+    if (res.status === 429 && retries > 0) {
+      // TMDB rate limit - wait and retry
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return fetchWithRetry(url, retries - 1, delayMs * 2);
+    }
+    return res;
+  } catch (err) {
+    if (retries > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return fetchWithRetry(url, retries - 1, delayMs * 2);
+    }
+    throw err;
+  }
+}
+
+async function getGenresMap(): Promise<Map<number, string>> {
+  if (cachedGenreMap && cachedGenreMap.size > 0) {
+    return cachedGenreMap;
+  }
+
+  const tmdbKey = getTmdbApiKey();
+  const genreMap = new Map<number, string>();
+
+  try {
+    const [movieGenresRes, tvGenresRes] = await Promise.all([
+      fetchWithRetry(
+        `https://api.themoviedb.org/3/genre/movie/list?api_key=${tmdbKey}&language=en-US`,
+        1
+      ).catch(() => null),
+      fetchWithRetry(
+        `https://api.themoviedb.org/3/genre/tv/list?api_key=${tmdbKey}&language=en-US`,
+        1
+      ).catch(() => null),
+    ]);
+
+    if (movieGenresRes && movieGenresRes.ok) {
+      const gData = await movieGenresRes.json();
+      for (const g of gData.genres || []) genreMap.set(g.id, g.name);
+    }
+    if (tvGenresRes && tvGenresRes.ok) {
+      const gData = await tvGenresRes.json();
+      for (const g of gData.genres || []) genreMap.set(g.id, g.name);
+    }
+    cachedGenreMap = genreMap;
+  } catch {
+    // ignore
+  }
+
+  return genreMap;
+}
+
 export async function searchMovies(query: string): Promise<SearchResult[]> {
+  const cleanQuery = query.trim().toLowerCase();
+  if (!cleanQuery) return [];
+
+  // Check LRU Cache
+  const cached = searchCache.get(cleanQuery);
+  if (cached) {
+    return cached;
+  }
+
   const tmdbKey = getTmdbApiKey();
 
-  const searchRes = await fetch(
+  const searchRes = await fetchWithRetry(
     `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=${encodeURIComponent(
       query
-    )}&include_adult=false&language=en-US&page=1`
+    )}&include_adult=false&language=en-US&page=1`,
+    2
   );
 
   if (!searchRes.ok) {
@@ -112,26 +229,9 @@ export async function searchMovies(query: string): Promise<SearchResult[]> {
     )
     .slice(0, 12);
 
-  const [movieGenresRes, tvGenresRes] = await Promise.all([
-    fetch(
-      `https://api.themoviedb.org/3/genre/movie/list?api_key=${tmdbKey}&language=en-US`
-    ).catch(() => null),
-    fetch(
-      `https://api.themoviedb.org/3/genre/tv/list?api_key=${tmdbKey}&language=en-US`
-    ).catch(() => null),
-  ]);
+  const genreMap = await getGenresMap();
 
-  const genreMap = new Map<number, string>();
-  if (movieGenresRes && movieGenresRes.ok) {
-    const gData = await movieGenresRes.json();
-    for (const g of gData.genres || []) genreMap.set(g.id, g.name);
-  }
-  if (tvGenresRes && tvGenresRes.ok) {
-    const gData = await tvGenresRes.json();
-    for (const g of gData.genres || []) genreMap.set(g.id, g.name);
-  }
-
-  return Promise.all(
+  const results = await Promise.all(
     rawResults.map(
       async (m: {
         id: number;
@@ -147,41 +247,46 @@ export async function searchMovies(query: string): Promise<SearchResult[]> {
         const isTv = m.media_type === "tv";
         const releaseDate = isTv ? m.first_air_date : m.release_date;
         const endpoint = isTv ? "tv" : "movie";
+        const providerCacheKey = `${endpoint}_${m.id}`;
 
-        let rawPlatforms: string[] = [];
-        try {
-          const provRes = await fetch(
-            `https://api.themoviedb.org/3/${endpoint}/${m.id}/watch/providers?api_key=${tmdbKey}`
-          );
-          if (provRes.ok) {
-            const provData = await provRes.json();
-            const regions = provData.results || {};
-            const platformSet = new Set<string>();
+        let rawPlatforms: string[] = providersCache.get(providerCacheKey) || [];
+        if (rawPlatforms.length === 0) {
+          try {
+            const provRes = await fetchWithRetry(
+              `https://api.themoviedb.org/3/${endpoint}/${m.id}/watch/providers?api_key=${tmdbKey}`,
+              1
+            );
+            if (provRes && provRes.ok) {
+              const provData = await provRes.json();
+              const regions = provData.results || {};
+              const platformSet = new Set<string>();
 
-            for (const regionCode of ["IN", "US", "GB", "CA"]) {
-              const region = regions[regionCode];
-              if (region?.flatrate) {
-                for (const p of region.flatrate as { provider_name: string }[]) {
-                  platformSet.add(p.provider_name);
+              for (const regionCode of ["IN", "US", "GB", "CA"]) {
+                const region = regions[regionCode];
+                if (region?.flatrate) {
+                  for (const p of region.flatrate as { provider_name: string }[]) {
+                    platformSet.add(p.provider_name);
+                  }
                 }
               }
-            }
 
-            if (platformSet.size === 0) {
-              const firstRegion = Object.values(regions)[0] as
-                | { flatrate?: { provider_name: string }[] }
-                | undefined;
-              if (firstRegion?.flatrate) {
-                for (const p of firstRegion.flatrate) {
-                  platformSet.add(p.provider_name);
+              if (platformSet.size === 0) {
+                const firstRegion = Object.values(regions)[0] as
+                  | { flatrate?: { provider_name: string }[] }
+                  | undefined;
+                if (firstRegion?.flatrate) {
+                  for (const p of firstRegion.flatrate) {
+                    platformSet.add(p.provider_name);
+                  }
                 }
               }
-            }
 
-            rawPlatforms = Array.from(platformSet);
+              rawPlatforms = Array.from(platformSet);
+              providersCache.set(providerCacheKey, rawPlatforms);
+            }
+          } catch {
+            // Optional provider fetch fallback
           }
-        } catch {
-          // Optional provider fetch
         }
 
         return {
@@ -199,11 +304,19 @@ export async function searchMovies(query: string): Promise<SearchResult[]> {
       }
     )
   );
+
+  searchCache.set(cleanQuery, results);
+  return results;
 }
 
 export async function fetchCategorySuggestions(
   category: "all" | "movie" | "tv" | "anime" = "all"
 ): Promise<SearchResult[]> {
+  const cached = categoryCache.get(category);
+  if (cached && cached.length > 0) {
+    return cached;
+  }
+
   const tmdbKey = getTmdbApiKey();
   let url = "";
 
@@ -218,7 +331,7 @@ export async function fetchCategorySuggestions(
     url = `https://api.themoviedb.org/3/trending/all/week?api_key=${tmdbKey}&language=en-US&page=1`;
   }
 
-  const searchRes = await fetch(url);
+  const searchRes = await fetchWithRetry(url, 2);
 
   if (!searchRes.ok) {
     throw new Error(`TMDB suggestions failed (${searchRes.status})`);
@@ -236,26 +349,9 @@ export async function fetchCategorySuggestions(
     )
     .slice(0, 16);
 
-  const [movieGenresRes, tvGenresRes] = await Promise.all([
-    fetch(
-      `https://api.themoviedb.org/3/genre/movie/list?api_key=${tmdbKey}&language=en-US`
-    ).catch(() => null),
-    fetch(
-      `https://api.themoviedb.org/3/genre/tv/list?api_key=${tmdbKey}&language=en-US`
-    ).catch(() => null),
-  ]);
+  const genreMap = await getGenresMap();
 
-  const genreMap = new Map<number, string>();
-  if (movieGenresRes && movieGenresRes.ok) {
-    const gData = await movieGenresRes.json();
-    for (const g of gData.genres || []) genreMap.set(g.id, g.name);
-  }
-  if (tvGenresRes && tvGenresRes.ok) {
-    const gData = await tvGenresRes.json();
-    for (const g of gData.genres || []) genreMap.set(g.id, g.name);
-  }
-
-  return Promise.all(
+  const results = await Promise.all(
     rawResults.map(
       async (m: {
         id: number;
@@ -273,41 +369,46 @@ export async function fetchCategorySuggestions(
         const isTv = itemType === "tv";
         const releaseDate = isTv ? m.first_air_date : m.release_date;
         const provEndpoint = isTv ? "tv" : "movie";
+        const providerCacheKey = `${provEndpoint}_${m.id}`;
 
-        let rawPlatforms: string[] = [];
-        try {
-          const provRes = await fetch(
-            `https://api.themoviedb.org/3/${provEndpoint}/${m.id}/watch/providers?api_key=${tmdbKey}`
-          );
-          if (provRes.ok) {
-            const provData = await provRes.json();
-            const regions = provData.results || {};
-            const platformSet = new Set<string>();
+        let rawPlatforms: string[] = providersCache.get(providerCacheKey) || [];
+        if (rawPlatforms.length === 0) {
+          try {
+            const provRes = await fetchWithRetry(
+              `https://api.themoviedb.org/3/${provEndpoint}/${m.id}/watch/providers?api_key=${tmdbKey}`,
+              1
+            );
+            if (provRes && provRes.ok) {
+              const provData = await provRes.json();
+              const regions = provData.results || {};
+              const platformSet = new Set<string>();
 
-            for (const regionCode of ["IN", "US", "GB", "CA"]) {
-              const region = regions[regionCode];
-              if (region?.flatrate) {
-                for (const p of region.flatrate as { provider_name: string }[]) {
-                  platformSet.add(p.provider_name);
+              for (const regionCode of ["IN", "US", "GB", "CA"]) {
+                const region = regions[regionCode];
+                if (region?.flatrate) {
+                  for (const p of region.flatrate as { provider_name: string }[]) {
+                    platformSet.add(p.provider_name);
+                  }
                 }
               }
-            }
 
-            if (platformSet.size === 0) {
-              const firstRegion = Object.values(regions)[0] as
-                | { flatrate?: { provider_name: string }[] }
-                | undefined;
-              if (firstRegion?.flatrate) {
-                for (const p of firstRegion.flatrate) {
-                  platformSet.add(p.provider_name);
+              if (platformSet.size === 0) {
+                const firstRegion = Object.values(regions)[0] as
+                  | { flatrate?: { provider_name: string }[] }
+                  | undefined;
+                if (firstRegion?.flatrate) {
+                  for (const p of firstRegion.flatrate) {
+                    platformSet.add(p.provider_name);
+                  }
                 }
               }
-            }
 
-            rawPlatforms = Array.from(platformSet);
+              rawPlatforms = Array.from(platformSet);
+              providersCache.set(providerCacheKey, rawPlatforms);
+            }
+          } catch {
+            // Optional provider fetch
           }
-        } catch {
-          // Optional provider fetch
         }
 
         // If anime, ensure "Animation" is in genres
@@ -332,6 +433,9 @@ export async function fetchCategorySuggestions(
       }
     )
   );
+
+  categoryCache.set(category, results);
+  return results;
 }
 
 export async function fetchTrendingTitles(
@@ -360,13 +464,21 @@ export function getStillUrl(stillPath: string | null): string | null {
 }
 
 export async function fetchTvSeriesDetails(tmdbId: number) {
+  const cached = tvDetailsCache.get(tmdbId);
+  if (cached) {
+    return cached;
+  }
+
   const tmdbKey = getTmdbApiKey();
   try {
-    const res = await fetch(
-      `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${tmdbKey}&language=en-US`
+    const res = await fetchWithRetry(
+      `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${tmdbKey}&language=en-US`,
+      2
     );
     if (!res.ok) throw new Error(`TV details HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json();
+    tvDetailsCache.set(tmdbId, data);
+    return data;
   } catch (err) {
     console.warn(`[TMDB] fetchTvSeriesDetails failed for ${tmdbId}:`, err);
     throw err;
@@ -382,11 +494,13 @@ export async function detectMediaType(
   try {
     // Check both movie and tv endpoints concurrently to accurately determine the media type
     const [movieRes, tvRes] = await Promise.all([
-      fetch(
-        `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${tmdbKey}&language=en-US`
+      fetchWithRetry(
+        `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${tmdbKey}&language=en-US`,
+        1
       ).catch(() => null),
-      fetch(
-        `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${tmdbKey}&language=en-US`
+      fetchWithRetry(
+        `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${tmdbKey}&language=en-US`,
+        1
       ).catch(() => null),
     ]);
 
@@ -454,22 +568,34 @@ export async function detectMediaType(
 }
 
 export async function fetchTvSeasonEpisodes(tmdbId: number, seasonNumber: number) {
+  const cacheKey = `${tmdbId}_${seasonNumber}`;
+  const cached = seasonEpisodesCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const tmdbKey = getTmdbApiKey();
   try {
-    const res = await fetch(
-      `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${tmdbKey}&language=en-US`
+    const res = await fetchWithRetry(
+      `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${tmdbKey}&language=en-US`,
+      2
     );
     if (!res.ok) {
       // If 404 or other status, try without language
-      const fallbackRes = await fetch(
-        `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${tmdbKey}`
+      const fallbackRes = await fetchWithRetry(
+        `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${tmdbKey}`,
+        1
       );
       if (!fallbackRes.ok) {
         throw new Error(`TMDB season ${seasonNumber} HTTP ${res.status}`);
       }
-      return await fallbackRes.json();
+      const fallbackData = await fallbackRes.json();
+      seasonEpisodesCache.set(cacheKey, fallbackData);
+      return fallbackData;
     }
-    return await res.json();
+    const data = await res.json();
+    seasonEpisodesCache.set(cacheKey, data);
+    return data;
   } catch (err) {
     console.warn(`[TMDB] fetchTvSeasonEpisodes failed for tv/${tmdbId}/season/${seasonNumber}:`, err);
     return { episodes: [] };

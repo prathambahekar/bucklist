@@ -20,8 +20,10 @@ import { OttBadge } from "./OttBadge";
 interface SearchAddDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddToWatchlist: (item: SearchResult) => Promise<void> | void;
-  onAddToWatched: (item: SearchResult) => Promise<void> | void;
+  onToggleWatchlist: (item: SearchResult) => Promise<void> | void;
+  onToggleWatched: (item: SearchResult) => Promise<void> | void;
+  onAddToWatchlist?: (item: SearchResult) => Promise<void> | void;
+  onAddToWatched?: (item: SearchResult) => Promise<void> | void;
   existingWatchlistIds: Set<number>;
   existingWatchedIds: Set<number>;
   addingId: number | null;
@@ -39,12 +41,16 @@ function isAnimeItem(item: SearchResult): boolean {
 export function SearchAddDrawer({
   isOpen,
   onClose,
+  onToggleWatchlist,
+  onToggleWatched,
   onAddToWatchlist,
   onAddToWatched,
   existingWatchlistIds,
   existingWatchedIds,
   addingId,
 }: SearchAddDrawerProps) {
+  const handleWatchlistAction = onToggleWatchlist || onAddToWatchlist;
+  const handleWatchedAction = onToggleWatched || onAddToWatched;
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [categorySuggestions, setCategorySuggestions] = useState<
@@ -53,6 +59,7 @@ export function SearchAddDrawer({
   const [loading, setLoading] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<FilterCategory>("all");
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
 
@@ -65,8 +72,23 @@ export function SearchAddDrawer({
     } else {
       setQuery("");
       setSearchResults([]);
+      setFetchError(null);
     }
   }, [isOpen]);
+
+  const loadSuggestions = (cat: FilterCategory) => {
+    setSuggestionsLoading(true);
+    setFetchError(null);
+    fetchCategorySuggestions(cat)
+      .then((res) => {
+        setCategorySuggestions((prev) => ({ ...prev, [cat]: res }));
+      })
+      .catch((err) => {
+        console.warn("Category suggestions fetch failed:", err);
+        setFetchError("Unable to load trending titles. Tap retry to reload.");
+      })
+      .finally(() => setSuggestionsLoading(false));
+  };
 
   // Fetch suggestions for active category when not searching
   useEffect(() => {
@@ -74,13 +96,7 @@ export function SearchAddDrawer({
     if (query.trim().length >= 2) return;
 
     if (!categorySuggestions[activeCategory]) {
-      setSuggestionsLoading(true);
-      fetchCategorySuggestions(activeCategory)
-        .then((res) => {
-          setCategorySuggestions((prev) => ({ ...prev, [activeCategory]: res }));
-        })
-        .catch((err) => console.warn("Category suggestions fetch failed:", err))
-        .finally(() => setSuggestionsLoading(false));
+      loadSuggestions(activeCategory);
     }
   }, [isOpen, activeCategory, query, categorySuggestions]);
 
@@ -101,10 +117,12 @@ export function SearchAddDrawer({
     if (trimmed.length < 2) {
       setSearchResults([]);
       setLoading(false);
+      setFetchError(null);
       return;
     }
 
     setLoading(true);
+    setFetchError(null);
     const curId = ++requestIdRef.current;
     const timer = setTimeout(async () => {
       try {
@@ -116,6 +134,7 @@ export function SearchAddDrawer({
         console.error("Search failed:", err);
         if (curId === requestIdRef.current) {
           setSearchResults([]);
+          setFetchError("Search request timed out or was rate limited. Tap retry to try again.");
         }
       } finally {
         if (curId === requestIdRef.current) {
@@ -156,7 +175,7 @@ export function SearchAddDrawer({
   return (
     <div
       id="search-add-drawer-root"
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center sm:p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[60] flex flex-col justify-end sm:justify-center items-center sm:p-4 animate-in fade-in duration-200"
     >
       {/* Backdrop */}
       <div
@@ -222,6 +241,7 @@ export function SearchAddDrawer({
                 onClick={() => {
                   setQuery("");
                   setSearchResults([]);
+                  setFetchError(null);
                   inputRef.current?.focus();
                 }}
                 className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
@@ -316,7 +336,34 @@ export function SearchAddDrawer({
           id="search-drawer-results-list"
           className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3"
         >
-          {currentLoading ? (
+          {fetchError ? (
+            <div className="py-16 flex flex-col items-center justify-center text-center px-4">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3 text-amber-400">
+                <Film className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-semibold text-zinc-200 mb-1">
+                Unable to load results
+              </h4>
+              <p className="text-xs text-zinc-400 max-w-xs mb-3">
+                {fetchError}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isSearching) {
+                    const q = query;
+                    setQuery("");
+                    setTimeout(() => setQuery(q), 50);
+                  } else {
+                    loadSuggestions(activeCategory);
+                  }
+                }}
+                className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          ) : currentLoading ? (
             <div className="py-16 flex flex-col items-center justify-center text-center">
               <Loader2 className="w-7 h-7 text-amber-400 animate-spin mb-3" />
               <p className="text-sm font-medium text-zinc-300">Finding titles...</p>
@@ -329,9 +376,22 @@ export function SearchAddDrawer({
               <h4 className="text-sm font-semibold text-zinc-300 mb-1">
                 {isSearching ? `No results for "${query}"` : "No titles found"}
               </h4>
-              <p className="text-xs text-zinc-500 max-w-xs">
+              <p className="text-xs text-zinc-500 max-w-xs mb-3">
                 Try searching with another spelling or switch the category filter.
               </p>
+              {isSearching && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setActiveCategory("all");
+                    inputRef.current?.focus();
+                  }}
+                  className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  Clear search & Reset
+                </button>
+              )}
             </div>
           ) : (
             filteredList.map((item) => {
@@ -422,19 +482,26 @@ export function SearchAddDrawer({
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 mt-2.5 pt-1.5 flex-wrap">
-                      {/* Add to Watchlist Button */}
+                      {/* Watchlist Toggle Button (Re-clicking removes/undoes from watchlist) */}
                       <button
                         type="button"
                         id={`btn-add-watchlist-${item.tmdb_id}`}
-                        disabled={isWatchlist || isWatched || isProcessing}
-                        onClick={() => onAddToWatchlist(item)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        disabled={isProcessing}
+                        onClick={() => handleWatchlistAction?.(item)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                           isWatchlist
-                            ? "bg-amber-500/15 text-amber-400 border border-amber-500/30 cursor-default"
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
                             : isWatched
-                            ? "bg-zinc-800/80 text-zinc-500 border border-zinc-800 cursor-not-allowed opacity-50"
-                            : "bg-zinc-100 hover:bg-amber-400 text-zinc-950 shadow-xs active:scale-95"
+                            ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                            : "bg-zinc-100 hover:bg-amber-400 text-zinc-950 shadow-xs"
                         }`}
+                        title={
+                          isWatchlist
+                            ? "In Watchlist — Click to remove (Undo)"
+                            : isWatched
+                            ? "Marked watched — Click to move back to To Watch"
+                            : "Add to Watchlist"
+                        }
                       >
                         {isProcessing ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -451,18 +518,22 @@ export function SearchAddDrawer({
                         )}
                       </button>
 
-                      {/* Add directly to Watched Button */}
+                      {/* Watched Toggle Button (Re-clicking unmarks/undoes watched status) */}
                       <button
                         type="button"
                         id={`btn-add-watched-${item.tmdb_id}`}
                         disabled={isProcessing}
-                        onClick={() => onAddToWatched(item)}
+                        onClick={() => handleWatchedAction?.(item)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                           isWatched
-                            ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30"
+                            ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40"
                             : "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800"
                         }`}
-                        title={isWatched ? "Click to edit rating" : "Rate & Mark Watched"}
+                        title={
+                          isWatched
+                            ? "Watched — Click to unmark (Undo)"
+                            : "Rate & Mark Watched"
+                        }
                       >
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                         <span>{isWatched ? "Watched" : "Mark Watched"}</span>

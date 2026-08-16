@@ -141,12 +141,12 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
         onClick={() => setIsOpen(!isOpen)}
         className={`inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-xs border ${
           compact
-            ? "px-2 py-0.5 rounded-md text-[11px] font-medium"
-            : "px-3.5 py-1.5 rounded-full text-xs font-semibold"
+            ? "px-2 py-0.5 rounded-lg text-[10.5px] font-medium bg-zinc-950/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800/80 hover:border-zinc-700"
+            : "px-3.5 py-1.5 rounded-full text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800 hover:border-zinc-700"
         } ${
           isOpen
             ? "bg-zinc-800 text-white border-amber-500/60 ring-2 ring-amber-500/20"
-            : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800 hover:border-zinc-700"
+            : ""
         }`}
         title="Click to select watched date"
       >

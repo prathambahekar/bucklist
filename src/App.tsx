@@ -26,6 +26,7 @@ import {
   CalendarRange,
   Clock,
   Settings,
+  CheckSquare,
 } from "lucide-react";
 import {
   getLocalWatchlist,
@@ -57,11 +58,14 @@ import {
 } from "./lib/api";
 import { EpisodeDrawer } from "./components/EpisodeDrawer";
 import { StarRating } from "./components/StarRating";
-import { OttBadge, OttIcon } from "./components/OttBadge";
+import { OttBadge, getPlatformAccentTheme } from "./components/OttBadge";
 import { DatePickerPopover } from "./components/DatePickerPopover";
 import { SettingsView } from "./components/SettingsView";
 import { WatchedTimelineView } from "./components/WatchedTimelineView";
 import { SearchAddDrawer } from "./components/SearchAddDrawer";
+import { NotificationPopover } from "./components/NotificationPopover";
+import { SwipeableMovieCard } from "./components/SwipeableMovieCard";
+import { BatchManagementBar } from "./components/BatchManagementBar";
 import type {
   WatchlistMovie,
   SearchResult,
@@ -122,6 +126,10 @@ export default function App() {
   const [watchedCategory, setWatchedCategory] = useState<WatchedCategory>(() =>
     getLocalWatchedCategory()
   );
+
+  // Batch Multi-Select Mode State
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedMovieIds, setSelectedMovieIds] = useState<string[]>([]);
 
   const handleSetToWatchViewMode = useCallback((mode: ToWatchViewMode) => {
     setToWatchViewMode(mode);
@@ -417,6 +425,51 @@ export default function App() {
     setAddingId(null);
   }, []);
 
+  const handleToggleWatchlist = useCallback(async (item: SearchResult) => {
+    setAddingId(item.tmdb_id);
+    const current = getLocalWatchlist();
+    const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
+    const existingInWatched = current.find((m) => m.tmdb_id === item.tmdb_id && m.watched);
+
+    if (existingInWatchlist) {
+      // Re-clicking "In Watchlist" undoes the task: remove from watchlist
+      const updated = current.filter((m) => m.id !== existingInWatchlist.id);
+      saveLocalWatchlist(updated);
+      setMovies((prev) => prev.filter((m) => m.id !== existingInWatchlist.id));
+    } else if (existingInWatched) {
+      // If it was in watched, move back to to-watch (unmarking watched)
+      const unwatchedMovie: WatchlistMovie = {
+        ...existingInWatched,
+        watched: false,
+        watched_date: null,
+      };
+      const updated = current.map((m) => (m.id === existingInWatched.id ? unwatchedMovie : m));
+      saveLocalWatchlist(updated);
+      setWatched((prev) => prev.filter((m) => m.id !== existingInWatched.id));
+      setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.id !== existingInWatched.id)]);
+    } else {
+      // Add to watchlist
+      const newRecord: WatchlistMovie = {
+        id: "wl_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6),
+        tmdb_id: item.tmdb_id,
+        title: item.title,
+        poster_path: item.poster_path,
+        release_year: item.release_year,
+        media_type: item.media_type,
+        genres: item.genres || [],
+        platforms: normalizePlatformsList(item.platforms || []),
+        watched: false,
+        watched_date: null,
+        rating: null,
+        created_at: new Date().toISOString(),
+      };
+      const updated = [newRecord, ...current];
+      saveLocalWatchlist(updated);
+      setMovies((prev) => [newRecord, ...prev]);
+    }
+    setAddingId(null);
+  }, []);
+
   const handleOpenWatchedModal = useCallback(
     (movie: WatchlistMovie, defaultRating?: number) => {
       setWatchedModalMovie(movie);
@@ -426,14 +479,19 @@ export default function App() {
     []
   );
 
-  const handleAddToWatched = useCallback(
+  const handleToggleWatched = useCallback(
     (item: SearchResult) => {
-      const existingInMovies = movies.find((m) => m.tmdb_id === item.tmdb_id);
-      const existingInWatched = watched.find((m) => m.tmdb_id === item.tmdb_id);
-      const existing = existingInMovies || existingInWatched;
+      const current = getLocalWatchlist();
+      const existingInWatched = current.find((m) => m.tmdb_id === item.tmdb_id && m.watched);
+      const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
 
-      if (existing) {
-        handleOpenWatchedModal(existing, existing.rating ?? 5);
+      if (existingInWatched) {
+        // Re-clicking "Watched" / "Mark Watched" undoes the watched task: remove from watched
+        const updated = current.filter((m) => m.id !== existingInWatched.id);
+        saveLocalWatchlist(updated);
+        setWatched((prev) => prev.filter((m) => m.id !== existingInWatched.id));
+      } else if (existingInWatchlist) {
+        handleOpenWatchedModal(existingInWatchlist, 5);
       } else {
         const todayDate = getLocalTodayString();
         const newRecord: WatchlistMovie = {
@@ -453,7 +511,14 @@ export default function App() {
         handleOpenWatchedModal(newRecord, 5);
       }
     },
-    [movies, watched, handleOpenWatchedModal]
+    [handleOpenWatchedModal]
+  );
+
+  const handleAddToWatched = useCallback(
+    (item: SearchResult) => {
+      handleToggleWatched(item);
+    },
+    [handleToggleWatched]
   );
 
   async function handleSaveWatched() {
@@ -577,10 +642,131 @@ export default function App() {
   async function handleDelete(id: string) {
     setMovies((prev) => prev.filter((m) => m.id !== id));
     setWatched((prev) => prev.filter((m) => m.id !== id));
+    setSelectedMovieIds((prev) => prev.filter((selectedId) => selectedId !== id));
 
     const current = getLocalWatchlist();
     saveLocalWatchlist(current.filter((m) => m.id !== id));
   }
+
+  // Batch Multi-Select Handlers
+  const handleToggleSelectMovie = useCallback((id: string) => {
+    setSelectedMovieIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }, []);
+
+  const handleSelectAllInView = useCallback((itemIds: string[]) => {
+    setSelectedMovieIds(itemIds);
+  }, []);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedMovieIds([]);
+  }, []);
+
+  const handleBatchDelete = useCallback(() => {
+    if (selectedMovieIds.length === 0) return;
+    const idsToDelete = new Set(selectedMovieIds);
+
+    setMovies((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
+    setWatched((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
+
+    const current = getLocalWatchlist();
+    const updatedList = current.filter((m) => !idsToDelete.has(m.id));
+    saveLocalWatchlist(updatedList);
+
+    setSelectedMovieIds([]);
+    setIsBatchMode(false);
+  }, [selectedMovieIds]);
+
+  const handleBatchMarkWatched = useCallback(
+    (rating: number = 5) => {
+      if (selectedMovieIds.length === 0) return;
+      const idsToMark = new Set(selectedMovieIds);
+      const today = getLocalTodayString();
+
+      const moviesToMove = movies.filter((m) => idsToMark.has(m.id));
+      const newlyWatched: WatchlistMovie[] = moviesToMove.map((m) => ({
+        ...m,
+        watched: true,
+        rating: rating || m.rating || 5,
+        watched_date: today,
+      }));
+
+      setMovies((prev) => prev.filter((m) => !idsToMark.has(m.id)));
+      setWatched((prev) => [...newlyWatched, ...prev.filter((m) => !idsToMark.has(m.id))]);
+
+      const current = getLocalWatchlist();
+      const updatedList = current.map((m) => {
+        if (idsToMark.has(m.id)) {
+          return {
+            ...m,
+            watched: true,
+            rating: rating || m.rating || 5,
+            watched_date: today,
+          };
+        }
+        return m;
+      });
+      saveLocalWatchlist(updatedList);
+
+      setSelectedMovieIds([]);
+      setIsBatchMode(false);
+    },
+    [selectedMovieIds, movies]
+  );
+
+  const handleBatchMoveToWatchlist = useCallback(() => {
+    if (selectedMovieIds.length === 0) return;
+    const idsToMove = new Set(selectedMovieIds);
+
+    const watchedToMove = watched.filter((m) => idsToMove.has(m.id));
+    const newlyUnwatched: WatchlistMovie[] = watchedToMove.map((m) => ({
+      ...m,
+      watched: false,
+      watched_date: null,
+    }));
+
+    setWatched((prev) => prev.filter((m) => !idsToMove.has(m.id)));
+    setMovies((prev) => [...newlyUnwatched, ...prev.filter((m) => !idsToMove.has(m.id))]);
+
+    const current = getLocalWatchlist();
+    const updatedList = current.map((m) => {
+      if (idsToMove.has(m.id)) {
+        return {
+          ...m,
+          watched: false,
+          watched_date: null,
+        };
+      }
+      return m;
+    });
+    saveLocalWatchlist(updatedList);
+
+    setSelectedMovieIds([]);
+    setIsBatchMode(false);
+  }, [selectedMovieIds, watched]);
+
+  const handleBatchAddGenre = useCallback(
+    (newGenre: string) => {
+      if (selectedMovieIds.length === 0 || !newGenre) return;
+      const targetIds = new Set(selectedMovieIds);
+
+      const updateItemGenres = (item: WatchlistMovie) => {
+        if (!targetIds.has(item.id)) return item;
+        const currentGenres = item.genres || [];
+        if (currentGenres.includes(newGenre)) return item;
+        return { ...item, genres: [...currentGenres, newGenre] };
+      };
+
+      setMovies((prev) => prev.map(updateItemGenres));
+      setWatched((prev) => prev.map(updateItemGenres));
+
+      const current = getLocalWatchlist();
+      const updatedList = current.map(updateItemGenres);
+      saveLocalWatchlist(updatedList);
+    },
+    [selectedMovieIds]
+  );
 
   const handleMoveToWatchlist = useCallback((item: WatchlistMovie) => {
     const unwatchedMovie: WatchlistMovie = {
@@ -695,56 +881,57 @@ export default function App() {
     return processedWatchedAll;
   }, [processedWatchedAll, watchedCategory, isItemAnime, isItemTv]);
 
+  const isAnyModalOpen =
+    isSearchDrawerOpen ||
+    Boolean(activeTvDrawerMovie) ||
+    Boolean(detailMovie) ||
+    Boolean(watchedModalMovie) ||
+    genreModalOpen;
+
   return (
     <div id="bucklist-app" className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center pb-24">
       <div className="w-full max-w-6xl xl:max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
         {/* Header Bar */}
-        <header id="app-header" className="flex items-center justify-between py-3 border-b border-zinc-800/80 mb-4">
-          <div className="flex items-center gap-3">
-            <div id="logo-badge" className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center text-zinc-950 shadow-md shadow-amber-500/20">
-              <Bookmark className="w-5 h-5 fill-zinc-950" />
+        <header id="app-header" className="flex items-center justify-between py-2 sm:py-3 mb-2 sm:mb-3">
+          <div className="flex items-center gap-3 select-none">
+            <div id="logo-badge" className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-zinc-950 shadow-lg shadow-amber-500/20 ring-1 ring-amber-400/40">
+              <Bookmark className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-zinc-100">Bucklist</h1>
-              <p className="text-xs text-zinc-500 hidden sm:block">Personal Movie & TV Watchlist</p>
+              <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-zinc-100 flex items-center gap-2">
+                <span>Bucklist</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/90 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded-md hidden xs:inline-block">
+                  Cinema
+                </span>
+              </h1>
+              <p className="text-[11px] text-zinc-500 hidden sm:block font-medium">Personal Movie & Series Tracker</p>
             </div>
           </div>
 
-          {/* Top Badges & Actions */}
-          <div id="header-stats" className="flex items-center gap-1.5 sm:gap-2">
+          {/* Top Actions */}
+          <div id="header-actions" className="flex items-center gap-1.5 sm:gap-2">
             <button
               id="open-settings-page-btn"
               type="button"
               onClick={() => setTab(tab === "settings" ? "towatch" : "settings")}
-              className={`flex items-center justify-center gap-1.5 h-7 sm:h-8 px-2 sm:px-3 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-sm border ${
+              className={`flex items-center justify-center gap-1.5 h-9 w-9 sm:w-auto sm:px-3 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer shadow-xs border ${
                 tab === "settings"
-                  ? "bg-amber-500 text-zinc-950 border-amber-500 font-bold shadow-amber-500/20"
-                  : "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800 hover:border-zinc-700"
+                  ? "bg-zinc-800 text-amber-400 border-amber-500/50 shadow-sm ring-1 ring-amber-400/25 font-bold"
+                  : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800/90 hover:border-zinc-700 active:scale-95"
               }`}
               title="Settings & Data Management"
             >
-              <Settings className={`w-3.5 h-3.5 shrink-0 ${tab === "settings" ? "text-zinc-950" : "text-amber-400"}`} />
-              <span className="hidden sm:inline">Settings</span>
+              <Settings className={`w-4 h-4 shrink-0 transition-transform duration-200 ${tab === "settings" ? "text-amber-400 rotate-90" : "text-zinc-400 group-hover:text-amber-400"}`} />
+              <span className="hidden sm:inline font-medium">Settings</span>
             </button>
 
-            <div
-              id="stat-to-watch"
-              className="flex items-center justify-center gap-1 sm:gap-1.5 h-7 sm:h-8 bg-zinc-900 border border-zinc-800/80 px-2 sm:px-3 rounded-full text-xs font-semibold text-zinc-200"
-              title={`${movies.length} To Watch`}
-            >
-              <Film className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              <span>{movies.length}</span>
-              <span className="hidden sm:inline">To Watch</span>
-            </div>
-            <div
-              id="stat-watched"
-              className="flex items-center justify-center gap-1 sm:gap-1.5 h-7 sm:h-8 bg-zinc-900 border border-zinc-800/80 px-2 sm:px-3 rounded-full text-xs font-semibold text-zinc-200"
-              title={`${watched.length} Watched`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>{watched.length}</span>
-              <span className="hidden sm:inline">Watched</span>
-            </div>
+            {/* Notification Button on Right Side */}
+            <NotificationPopover
+              movies={movies}
+              watched={watched}
+              tvProgressMap={tvProgressMap}
+              onSelectMovie={(item) => setDetailMovie(item)}
+            />
           </div>
         </header>
 
@@ -784,6 +971,34 @@ export default function App() {
                   <span className="hidden sm:inline">Filters</span>
                   {(selectedGenre || selectedPlatform) && (
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  )}
+                </button>
+
+                {/* Batch Multi-Select Mode Button */}
+                <button
+                  id="batch-mode-toggle-btn"
+                  type="button"
+                  onClick={() => {
+                    if (isBatchMode) {
+                      setIsBatchMode(false);
+                      setSelectedMovieIds([]);
+                    } else {
+                      setIsBatchMode(true);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    isBatchMode
+                      ? "bg-amber-500 text-zinc-950 font-bold border-amber-400 shadow-xs"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  }`}
+                  title="Batch manage items"
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Select</span>
+                  {selectedMovieIds.length > 0 && (
+                    <span className="text-[10px] bg-zinc-950 text-amber-400 px-1.5 rounded-full font-bold">
+                      {selectedMovieIds.length}
+                    </span>
                   )}
                 </button>
               </div>
@@ -908,19 +1123,19 @@ export default function App() {
                   {/* List Platform Pills */}
                   {allPlatforms.map((p) => {
                     const active = selectedPlatform === p;
+                    const theme = getPlatformAccentTheme(p);
                     return (
                       <button
                         key={p}
                         type="button"
                         onClick={() => setSelectedPlatform(active ? null : p)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors border cursor-pointer ${
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer ${
                           active
-                            ? "bg-amber-500 text-zinc-950 border-amber-500 font-semibold shadow-sm"
-                            : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700"
+                            ? `${theme.bg} ${theme.border} ${theme.text} ring-2 ring-amber-400/80 shadow-md scale-105`
+                            : `${theme.bg} ${theme.border} ${theme.text} opacity-80 hover:opacity-100`
                         }`}
                       >
-                        <OttIcon platform={p} className="w-3.5 h-3.5" />
-                        <span>{p}</span>
+                        {p}
                       </button>
                     );
                   })}
@@ -1094,7 +1309,7 @@ export default function App() {
                     ? "No watched animes yet"
                     : "No watched titles yet"}
                 </h3>
-                <p className="text-xs text-zinc-500 max-w-sm">
+                <p className="text-xs text-zinc-500 max-w-sm mb-4">
                   {selectedGenre || selectedPlatform
                     ? "Try adjusting or resetting your active OTT and Genre filters above."
                     : tab === "towatch"
@@ -1107,6 +1322,30 @@ export default function App() {
                     ? "Anime series & films you mark as watched will appear here."
                     : "When you finish watching a title, tap 'Mark as Watched' to review and rate it!"}
                 </p>
+
+                {selectedGenre || selectedPlatform ? (
+                  <button
+                    id="empty-state-reset-filters-btn"
+                    type="button"
+                    onClick={() => {
+                      setSelectedGenre(null);
+                      setSelectedPlatform(null);
+                    }}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer"
+                  >
+                    Reset all filters
+                  </button>
+                ) : tab === "towatch" ? (
+                  <button
+                    id="empty-state-add-btn"
+                    type="button"
+                    onClick={() => setIsSearchDrawerOpen(true)}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
+                    <span>Add your first title</span>
+                  </button>
+                ) : null}
               </div>
             ) : (
               (tab === "towatch" ? displayMovies : displayWatched).map((item) => {
@@ -1123,194 +1362,256 @@ export default function App() {
                     ? 25
                     : 0;
 
+                const isSelected = selectedMovieIds.includes(item.id);
                 const activeViewMode = tab === "towatch" ? toWatchViewMode : watchedViewMode;
+
+                // Swipe actions
+                const handleCardSwipeRight = () => {
+                  if (isWatchedTab) {
+                    handleOpenWatchedModal(item, item.rating || 5);
+                  } else {
+                    handleOpenWatchedModal(item, 5);
+                  }
+                };
+
+                const handleCardSwipeLeft = () => {
+                  handleDelete(item.id);
+                };
 
                 /* OPTION 1: Poster Grid View Mode (Both To Watch & Watched) */
                 if (activeViewMode === "grid") {
                   return (
-                    <div
+                    <SwipeableMovieCard
                       key={item.id}
-                      id={`movie-card-${item.id}`}
-                      onClick={() => setDetailMovie(item)}
-                      className="group bg-zinc-900/90 hover:bg-zinc-900 border border-zinc-800/80 hover:border-amber-500/40 rounded-2xl p-2 sm:p-2.5 flex flex-col transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative"
+                      id={`swipeable-grid-${item.id}`}
+                      isWatched={isWatchedTab}
+                      disabled={isBatchMode}
+                      onSwipeRight={handleCardSwipeRight}
+                      onSwipeLeft={handleCardSwipeLeft}
+                      rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
+                      leftActionLabel="Delete"
+                      className="h-full"
                     >
-                      {/* Poster Aspect Container */}
-                      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-zinc-800 shadow-md border border-zinc-800/80">
-                        <img
-                          src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
-                          alt={item.title}
-                          className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
-                          referrerPolicy="no-referrer"
-                        />
+                      <div
+                        id={`movie-card-${item.id}`}
+                        onClick={() => {
+                          if (isBatchMode) {
+                            handleToggleSelectMovie(item.id);
+                          } else {
+                            setDetailMovie(item);
+                          }
+                        }}
+                        className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-2 sm:p-2.5 flex flex-col transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative h-full ${
+                          isSelected
+                            ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
+                            : "border-zinc-800/80 hover:border-amber-500/40"
+                        }`}
+                      >
+                        {/* Poster Aspect Container */}
+                        <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-zinc-800 shadow-md border border-zinc-800/80">
+                          <img
+                            src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+                            alt={item.title}
+                            className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
+                            referrerPolicy="no-referrer"
+                          />
 
-                        {/* Top Left Badge: Star Rating (Watched) OR Type/Anime Badge (To Watch) */}
-                        {isWatchedTab ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenWatchedModal(item, item.rating || 5);
-                            }}
-                            className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-zinc-950/85 backdrop-blur-md px-1.5 sm:px-2 py-0.5 rounded-lg border border-amber-500/35 text-amber-300 text-[11px] sm:text-xs font-bold shadow-md hover:bg-amber-500 hover:text-zinc-950 hover:border-amber-400 transition-colors group/rate"
-                            title="Click to edit rating"
-                          >
-                            <Star className="w-3 h-3 fill-amber-400 text-amber-400 group-hover/rate:fill-zinc-950 group-hover/rate:text-zinc-950 transition-colors" />
-                            <span>{item.rating ? `${item.rating}★` : "Rate"}</span>
-                          </button>
-                        ) : (
-                          <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-zinc-950/85 backdrop-blur-md px-1.5 py-0.5 rounded-lg border border-amber-500/35 text-amber-300 text-[10px] font-bold shadow-md">
-                            {isItemAnime(item) ? (
-                              <span className="flex items-center gap-1">
-                                <Sparkles className="w-2.5 h-2.5" />
-                                <span>Anime</span>
-                              </span>
-                            ) : (
-                              <span>{isTv ? "TV" : "Movie"}</span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Top Right: Delete Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(item.id);
-                          }}
-                          className="absolute top-1.5 right-1.5 bg-zinc-950/80 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 p-1.5 rounded-lg border border-zinc-800/80 opacity-0 group-hover:opacity-100 transition-all backdrop-blur-xs shadow-md"
-                          title="Delete title"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-
-                        {/* Bottom Overlay for Quick Actions */}
-                        {isWatchedTab ? (
-                          isTv && (
+                          {/* Batch Selection Checkbox */}
+                          {isBatchMode ? (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveTvDrawerMovie({ ...item, media_type: "tv" });
+                                handleToggleSelectMovie(item.id);
                               }}
-                              className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between bg-zinc-950/85 backdrop-blur-md px-2 py-0.5 rounded-lg border border-amber-500/30 text-amber-300 text-[10px] font-semibold shadow-md hover:bg-amber-500 hover:text-zinc-950 transition-colors"
+                              className={`absolute top-1.5 left-1.5 p-1 rounded-lg shadow-lg backdrop-blur-md transition-all ${
+                                isSelected
+                                  ? "bg-amber-500 text-zinc-950 ring-2 ring-amber-400"
+                                  : "bg-zinc-950/80 text-zinc-400 hover:text-zinc-100 border border-zinc-700"
+                              }`}
                             >
-                              <span className="flex items-center gap-1">
-                                <Tv className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-                                <span>TV</span>
-                              </span>
-                              <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
-                            </button>
-                          )
-                        ) : isTv ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveTvDrawerMovie({ ...item, media_type: "tv" });
-                            }}
-                            className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md px-2 py-1 rounded-lg border border-zinc-700/80 hover:border-amber-500/50 text-zinc-100 hover:text-amber-300 text-[10px] font-semibold shadow-md transition-colors group/trackbtn"
-                          >
-                            <span className="flex items-center gap-1">
-                              <ListOrdered className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>Track Ep</span>
-                            </span>
-                            <span className="text-zinc-400 group-hover/trackbtn:text-amber-300">
-                              {watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep
-                            </span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenWatchedModal(item, 5);
-                            }}
-                            className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-center gap-1.5 bg-zinc-100/95 hover:bg-amber-400 text-zinc-950 backdrop-blur-md px-2 py-1 rounded-lg text-[11px] font-bold shadow-md transition-all active:scale-95"
-                          >
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>Watched</span>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Info below Poster */}
-                      <div className="mt-2 px-0.5">
-                        <h3
-                          className="font-bold text-xs sm:text-sm text-zinc-100 line-clamp-1 group-hover:text-amber-400 transition-colors"
-                          title={item.title}
-                        >
-                          {item.title}
-                        </h3>
-                        <div className="flex items-center justify-between mt-1 text-[10px] sm:text-[11px] text-zinc-500">
-                          <span>{item.release_year || (isTv ? "TV Series" : "Movie")}</span>
-                          {isWatchedTab ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenWatchedModal(item, item.rating || 5);
-                              }}
-                              className="text-zinc-400 hover:text-amber-300 flex items-center gap-0.5 transition-colors font-medium"
-                              title="Edit rating & date"
-                            >
-                              <Edit3 className="w-2.5 h-2.5" />
-                              <span>Edit</span>
+                              <CheckSquare className="w-4 h-4" />
                             </button>
                           ) : (
-                            (item.platforms || []).length > 0 && (
-                              <span className="text-[10px] text-amber-300 font-medium truncate max-w-[80px]">
-                                {item.platforms[0]}
-                              </span>
+                            /* Top Left Badge: Star Rating (Watched) OR Type/Anime Badge (To Watch) */
+                            isWatchedTab ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenWatchedModal(item, item.rating || 5);
+                                }}
+                                className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-zinc-950/85 backdrop-blur-md px-1.5 sm:px-2 py-0.5 rounded-lg border border-amber-500/35 text-amber-300 text-[11px] sm:text-xs font-bold shadow-md hover:bg-amber-500 hover:text-zinc-950 hover:border-amber-400 transition-colors group/rate"
+                                title="Click to edit rating"
+                              >
+                                <Star className="w-3 h-3 fill-amber-400 text-amber-400 group-hover/rate:fill-zinc-950 group-hover/rate:text-zinc-950 transition-colors" />
+                                <span>{item.rating ? `${item.rating}★` : "Rate"}</span>
+                              </button>
+                            ) : (
+                              <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-zinc-950/85 backdrop-blur-md px-1.5 py-0.5 rounded-lg border border-amber-500/35 text-amber-300 text-[10px] font-bold shadow-md">
+                                {isItemAnime(item) ? (
+                                  <span className="flex items-center gap-1">
+                                    <Sparkles className="w-2.5 h-2.5" />
+                                    <span>Anime</span>
+                                  </span>
+                                ) : (
+                                  <span>{isTv ? "TV" : "Movie"}</span>
+                                )}
+                              </div>
+                            )
+                          )}
+
+                          {/* Top Right: Delete Button */}
+                          {!isBatchMode && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(item.id);
+                              }}
+                              className="absolute top-1.5 right-1.5 bg-zinc-950/80 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 p-1.5 rounded-lg border border-zinc-800/80 opacity-0 group-hover:opacity-100 transition-all backdrop-blur-xs shadow-md"
+                              title="Delete title"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+
+                          {/* Bottom Overlay for Quick Actions */}
+                          {!isBatchMode && (
+                            isWatchedTab ? (
+                              isTv && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveTvDrawerMovie({ ...item, media_type: "tv" });
+                                  }}
+                                  className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between bg-zinc-950/85 backdrop-blur-md px-2 py-0.5 rounded-lg border border-amber-500/30 text-amber-300 text-[10px] font-semibold shadow-md hover:bg-amber-500 hover:text-zinc-950 transition-colors"
+                                >
+                                  <span className="flex items-center gap-1">
+                                    <Tv className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                                    <span>TV</span>
+                                  </span>
+                                  <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
+                                </button>
+                              )
+                            ) : isTv ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTvDrawerMovie({ ...item, media_type: "tv" });
+                                }}
+                                className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md px-2 py-1 rounded-lg border border-zinc-700/80 hover:border-amber-500/50 text-zinc-100 hover:text-amber-300 text-[10px] font-semibold shadow-md transition-colors group/trackbtn"
+                              >
+                                <span className="flex items-center gap-1">
+                                  <ListOrdered className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <span>Track Ep</span>
+                                </span>
+                                <span className="text-zinc-400 group-hover/trackbtn:text-amber-300">
+                                  {watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep
+                                </span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenWatchedModal(item, 5);
+                                }}
+                                className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-center gap-1.5 bg-zinc-100/95 hover:bg-amber-400 text-zinc-950 backdrop-blur-md px-2 py-1 rounded-lg text-[11px] font-bold shadow-md transition-all active:scale-95"
+                              >
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <span>Watched</span>
+                              </button>
                             )
                           )}
                         </div>
-                      </div>
-                    </div>
-                  );
-                }
 
-                /* OPTION 2 & 3: Detailed & Compact Horizontal Cards */
-                const isCompact = activeViewMode === "compact";
-
-                return (
-                  <div
-                    key={item.id}
-                    id={`movie-card-${item.id}`}
-                    onClick={() => setDetailMovie(item)}
-                    className={`group bg-zinc-900/90 hover:bg-zinc-900 border border-zinc-800/80 hover:border-amber-500/35 rounded-2xl transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative ${
-                      isCompact
-                        ? "p-3 flex gap-3"
-                        : "p-3.5 sm:p-4 flex gap-3.5 sm:gap-4"
-                    }`}
-                  >
-                    {/* Thumbnail */}
-                    <div
-                      className={`relative rounded-xl overflow-hidden bg-zinc-800 shrink-0 shadow-md border border-zinc-800/80 ${
-                        isCompact
-                          ? "w-16 sm:w-20 h-24 sm:h-28"
-                          : "w-22 sm:w-26 md:w-28 h-34 sm:h-38 md:h-40"
-                      }`}
-                    >
-                      <img
-                        src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
-                        alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-
-                    <div className="flex-1 min-w-0 flex flex-col justify-between">
-                      <div>
-                        {/* Header: Title & Delete */}
-                        <div className="flex items-start justify-between gap-1.5">
+                        {/* Info below Poster */}
+                        <div className="mt-2 px-0.5">
                           <h3
-                            className={`font-bold text-zinc-100 line-clamp-1 group-hover:text-amber-400 transition-colors ${
-                              isCompact ? "text-xs sm:text-sm" : "text-sm sm:text-base"
-                            }`}
+                            className="font-bold text-xs sm:text-sm text-zinc-100 line-clamp-1 group-hover:text-amber-400 transition-colors"
                             title={item.title}
                           >
                             {item.title}
                           </h3>
+                          <div className="flex items-center justify-between mt-1 text-[10px] sm:text-[11px] text-zinc-500">
+                            <span>{item.release_year || (isTv ? "TV Series" : "Movie")}</span>
+                            {isWatchedTab ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenWatchedModal(item, item.rating || 5);
+                                }}
+                                className="text-zinc-400 hover:text-amber-300 flex items-center gap-0.5 transition-colors font-medium"
+                                title="Edit rating & date"
+                              >
+                                <Edit3 className="w-2.5 h-2.5" />
+                                <span>Edit</span>
+                              </button>
+                            ) : (
+                              (item.platforms || []).length > 0 && (
+                                <span className="text-[10px] text-amber-300 font-medium truncate max-w-[80px]">
+                                  {item.platforms[0]}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </SwipeableMovieCard>
+                  );
+                }
+
+                /* OPTION 2: Compact Card View Mode */
+                if (activeViewMode === "compact") {
+                  const firstOtt = (item.platforms || [])[0];
+
+                  return (
+                    <SwipeableMovieCard
+                      key={item.id}
+                      id={`swipeable-compact-${item.id}`}
+                      isWatched={isWatchedTab}
+                      disabled={isBatchMode}
+                      onSwipeRight={handleCardSwipeRight}
+                      onSwipeLeft={handleCardSwipeLeft}
+                      rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
+                      leftActionLabel="Delete"
+                    >
+                      <div
+                        id={`movie-card-${item.id}`}
+                        onClick={() => {
+                          if (isBatchMode) {
+                            handleToggleSelectMovie(item.id);
+                          } else {
+                            setDetailMovie(item);
+                          }
+                        }}
+                        className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-xl p-2 sm:p-2.5 flex items-center gap-2.5 sm:gap-3 transition-all duration-150 shadow-2xs hover:shadow-md cursor-pointer relative ${
+                          isSelected
+                            ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
+                            : "border-zinc-800/80 hover:border-amber-500/35"
+                        }`}
+                      >
+                        {/* Checkbox for Batch Mode or Delete Button at Top Right */}
+                        {isBatchMode ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleSelectMovie(item.id);
+                            }}
+                            className={`absolute top-2 right-2 p-1 rounded-lg transition-all shadow-xs z-10 ${
+                              isSelected
+                                ? "bg-amber-500 text-zinc-950 ring-2 ring-amber-400"
+                                : "bg-zinc-950 text-zinc-400 hover:text-zinc-200 border border-zinc-700"
+                            }`}
+                          >
+                            <CheckSquare className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
                           <button
                             id={`delete-btn-${item.id}`}
                             type="button"
@@ -1318,167 +1619,348 @@ export default function App() {
                               e.stopPropagation();
                               handleDelete(item.id);
                             }}
-                            className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 p-1 -mr-1 -mt-0.5 rounded-lg transition-colors shrink-0"
+                            className="absolute top-2 right-2 bg-zinc-950 hover:bg-red-950/80 text-zinc-500 hover:text-red-400 border border-zinc-800/90 hover:border-red-500/40 p-1 rounded-lg transition-colors shadow-2xs z-10 cursor-pointer"
                             title="Delete title"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        </div>
-
-                        {/* Metadata Tag Row */}
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          {isItemAnime(item) ? (
-                            <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                              <Sparkles className="w-2.5 h-2.5" />
-                              <span>{isTv ? "Anime Series" : "Anime Movie"}</span>
-                            </span>
-                          ) : (
-                            <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                              {isTv ? "TV Series" : "Movie"}
-                            </span>
-                          )}
-                          {item.release_year && (
-                            <span className="text-[11px] text-zinc-400 font-medium">
-                              {item.release_year}
-                            </span>
-                          )}
-                          {isWatchedTab && item.watched_date && (
-                            <span className="text-[10px] text-zinc-500 font-medium ml-auto hidden xs:inline">
-                              {item.watched_date}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Clean Text-Only OTT Platforms (Shown in detailed mode or To Watch) */}
-                        {!isCompact && (item.platforms || []).length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {item.platforms.map((p) => (
-                              <span
-                                key={p}
-                                className="text-[10px] sm:text-[11px] font-medium text-amber-300/90 bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 rounded-md shadow-2xs whitespace-nowrap"
-                              >
-                                {p}
-                              </span>
-                            ))}
-                          </div>
                         )}
-                      </div>
 
-                      {/* Bottom Action / Episode Tracker / Rating */}
-                      <div
-                        className={`border-t border-zinc-800/70 ${
-                          isCompact ? "mt-2 pt-1.5" : "mt-3 pt-2.5"
-                        }`}
-                      >
-                        {!item.watched ? (
-                          isTv ? (
-                            /* TV Episode Tracker Button (Simplified clean layout) */
-                            <button
-                              id={`track-episodes-btn-${item.id}`}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveTvDrawerMovie({ ...item, media_type: "tv" });
-                              }}
-                              className={`w-full flex items-center justify-between gap-2 bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 hover:border-amber-500/40 rounded-xl text-xs font-semibold text-zinc-100 transition-all duration-200 active:scale-[0.99] shadow-sm group/tracker ${
-                                isCompact ? "py-1.5 px-2.5" : "py-2 sm:py-2.5 px-3"
-                              }`}
-                            >
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <ListOrdered className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span className="truncate group-hover/tracker:text-amber-300 transition-colors">
-                                  Track Ep
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="text-[11px] font-medium text-zinc-400">
-                                  {watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep
-                                </span>
-                                {progressPercent > 0 && (
-                                  <span
-                                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                                      progressPercent === 100
-                                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                        : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                                    }`}
-                                  >
-                                    {progressPercent}%
-                                  </span>
-                                )}
-                              </div>
-                            </button>
-                          ) : (
-                            <button
-                              id={`mark-watched-btn-${item.id}`}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenWatchedModal(item, 5);
-                              }}
-                              className={`w-full flex items-center justify-center gap-2 bg-zinc-100 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 active:scale-98 shadow-sm ${
-                                isCompact ? "py-1.5 px-2.5" : "py-2 sm:py-2.5 px-3"
-                              }`}
-                            >
-                              <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
-                              <span className="whitespace-nowrap">Mark as Watched</span>
-                            </button>
-                          )
-                        ) : (
-                          <div className="flex items-center justify-between gap-1 flex-wrap">
-                            {/* Star Rating with quick-edit trigger */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenWatchedModal(item, item.rating || 5);
-                              }}
-                              className="flex items-center gap-1 hover:bg-zinc-800/80 px-1.5 py-0.5 rounded-md transition-colors group/rate"
-                              title="Click to edit rating & date"
-                            >
-                              <StarRating
-                                value={item.rating || 0}
-                                readOnly={true}
-                                size="xs"
-                                allowHalf={true}
-                                showValueText={true}
-                              />
-                              <Edit3 className="w-2.5 h-2.5 text-zinc-500 group-hover/rate:text-amber-400 ml-0.5 opacity-60 group-hover/rate:opacity-100 transition-all" />
-                            </button>
+                        {/* Compact Poster Thumbnail */}
+                        <div className="w-11 h-16 sm:w-12 sm:h-17 rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-xs border border-zinc-800/80 relative">
+                          <img
+                            src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+                            alt={item.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
 
-                            <div className="flex items-center gap-1.5">
-                              {isTv ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveTvDrawerMovie({ ...item, media_type: "tv" });
-                                  }}
-                                  className="text-[10px] sm:text-[11px] text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 px-2 py-0.5 rounded-lg font-semibold transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
-                                >
-                                  <Tv className="w-3 h-3 text-amber-400 shrink-0" />
-                                  <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
-                                </button>
-                              ) : null}
+                        {/* Info & Content */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-center gap-1 pr-7">
+                          {/* Title */}
+                          <h3
+                            className="font-semibold text-xs sm:text-sm text-zinc-100 truncate group-hover:text-amber-400 transition-colors"
+                            title={item.title}
+                          >
+                            {item.title}
+                          </h3>
 
-                              {/* Edit Rating Button */}
+                          {/* Metadata & Inline Status */}
+                          <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                            {/* Type Pill */}
+                            {isItemAnime(item) ? (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0 flex items-center gap-0.5">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>Anime</span>
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0">
+                                {isTv ? "TV" : "Movie"}
+                              </span>
+                            )}
+
+                            {/* Year */}
+                            {item.release_year && (
+                              <span className="text-[11px] text-zinc-400 font-medium">
+                                {item.release_year}
+                              </span>
+                            )}
+
+                            {/* Single OTT Platform Badge */}
+                            {firstOtt && (
+                              <OttBadge platform={firstOtt} size="xs" />
+                            )}
+
+                            {/* Watched Tab: Rating Pill */}
+                            {!isBatchMode && isWatchedTab && (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleOpenWatchedModal(item, item.rating || 5);
                                 }}
-                                className="text-[10px] text-zinc-400 hover:text-amber-300 hover:bg-zinc-800/90 px-1.5 py-0.5 rounded-md border border-zinc-800 hover:border-amber-500/30 transition-colors flex items-center gap-1 shrink-0"
-                                title="Edit rating & date"
+                                className="flex items-center gap-1 text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/25 text-[11px] font-bold transition-colors cursor-pointer shrink-0"
+                                title="Click to edit rating"
                               >
-                                <Edit3 className="w-3 h-3" />
-                                <span className="hidden xs:inline">Edit</span>
+                                <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                                <span>{item.rating ? `${item.rating}★` : "Rate"}</span>
                               </button>
+                            )}
+
+                            {/* Watched Tab TV episode badge if applicable */}
+                            {!isBatchMode && isWatchedTab && isTv && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTvDrawerMovie({ ...item, media_type: "tv" });
+                                }}
+                                className="text-[10px] text-zinc-400 hover:text-amber-300 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-zinc-700/60 font-medium transition-colors flex items-center gap-1 shrink-0"
+                                title="Track TV episodes"
+                              >
+                                <Tv className="w-2.5 h-2.5" />
+                                <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
+                              </button>
+                            )}
+
+                            {/* To Watch Tab: Quick Action */}
+                            {!isBatchMode && !isWatchedTab && (
+                              <div className="shrink-0 flex items-center gap-1">
+                                {isTv ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveTvDrawerMovie({ ...item, media_type: "tv" });
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-semibold transition-colors border border-zinc-700/60"
+                                    title="Track TV episodes"
+                                  >
+                                    <ListOrdered className="w-3 h-3 text-amber-400" />
+                                    <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenWatchedModal(item, 5);
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-100 hover:bg-amber-400 text-zinc-950 text-[10px] font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+                                    title="Mark as Watched"
+                                  >
+                                    <Check className="w-3 h-3 stroke-[2.5]" />
+                                    <span>Watched</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </SwipeableMovieCard>
+                  );
+                }
+
+                /* OPTION 3: Detailed Horizontal Cards */
+                return (
+                  <SwipeableMovieCard
+                    key={item.id}
+                    id={`swipeable-detailed-${item.id}`}
+                    isWatched={isWatchedTab}
+                    disabled={isBatchMode}
+                    onSwipeRight={handleCardSwipeRight}
+                    onSwipeLeft={handleCardSwipeLeft}
+                    rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
+                    leftActionLabel="Delete"
+                  >
+                    <div
+                      id={`movie-card-${item.id}`}
+                      onClick={() => {
+                        if (isBatchMode) {
+                          handleToggleSelectMovie(item.id);
+                        } else {
+                          setDetailMovie(item);
+                        }
+                      }}
+                      className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-3.5 sm:p-4 flex gap-3.5 sm:gap-4 transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative ${
+                        isSelected
+                          ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
+                          : "border-zinc-800/80 hover:border-amber-500/35"
+                      }`}
+                    >
+                      {/* Thumbnail */}
+                      <div className="relative rounded-xl overflow-hidden bg-zinc-800 shrink-0 shadow-md border border-zinc-800/80 w-22 sm:w-26 md:w-28 h-34 sm:h-38 md:h-40">
+                        <img
+                          src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+                          alt={item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+
+                      <div className="flex-1 min-w-0 flex flex-col justify-between">
+                        <div>
+                          {/* Header: Title & Delete / Select Checkbox */}
+                          <div className="flex items-start justify-between gap-1.5">
+                            <h3
+                              className="font-bold text-zinc-100 line-clamp-1 group-hover:text-amber-400 transition-colors text-sm sm:text-base"
+                              title={item.title}
+                            >
+                              {item.title}
+                            </h3>
+                            {isBatchMode ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleSelectMovie(item.id);
+                                }}
+                                className={`p-1.5 rounded-lg transition-all shadow-xs shrink-0 ${
+                                  isSelected
+                                    ? "bg-amber-500 text-zinc-950 ring-2 ring-amber-400"
+                                    : "bg-zinc-950 text-zinc-400 hover:text-zinc-200 border border-zinc-700"
+                                }`}
+                              >
+                                <CheckSquare className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                id={`delete-btn-${item.id}`}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(item.id);
+                                }}
+                                className="bg-zinc-950 hover:bg-red-950/80 text-zinc-500 hover:text-red-400 border border-zinc-800/90 hover:border-red-500/40 p-1.5 rounded-lg transition-colors shadow-2xs shrink-0 cursor-pointer"
+                                title="Delete title"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Metadata Tag Row */}
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            {isItemAnime(item) ? (
+                              <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>{isTv ? "Anime Series" : "Anime Movie"}</span>
+                              </span>
+                            ) : (
+                              <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                {isTv ? "TV Series" : "Movie"}
+                              </span>
+                            )}
+                            {item.release_year && (
+                              <span className="text-[11px] text-zinc-400 font-medium">
+                                {item.release_year}
+                              </span>
+                            )}
+                            {isWatchedTab && item.watched_date && (
+                              <span className="text-[10px] text-zinc-500 font-medium ml-auto hidden xs:inline">
+                                {item.watched_date}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* OTT Badges with platform accent theme */}
+                          {(item.platforms || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {item.platforms.map((p) => (
+                                <OttBadge key={p} platform={p} size="sm" />
+                              ))}
                             </div>
+                          )}
+                        </div>
+
+                        {/* Bottom Action / Episode Tracker / Rating */}
+                        {!isBatchMode && (
+                          <div className="border-t border-zinc-800/70 mt-3 pt-2.5">
+                            {!item.watched ? (
+                              isTv ? (
+                                <button
+                                  id={`track-episodes-btn-${item.id}`}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveTvDrawerMovie({ ...item, media_type: "tv" });
+                                  }}
+                                  className="w-full flex items-center justify-between gap-2 bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 hover:border-amber-500/40 rounded-xl text-xs font-semibold text-zinc-100 transition-all duration-200 active:scale-[0.99] shadow-sm py-2 sm:py-2.5 px-3 group/tracker"
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <ListOrdered className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                    <span className="truncate group-hover/tracker:text-amber-300 transition-colors">
+                                      Track Ep
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[11px] font-medium text-zinc-400">
+                                      {watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep
+                                    </span>
+                                    {progressPercent > 0 && (
+                                      <span
+                                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                          progressPercent === 100
+                                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                            : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                        }`}
+                                      >
+                                        {progressPercent}%
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              ) : (
+                                <button
+                                  id={`mark-watched-btn-${item.id}`}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenWatchedModal(item, 5);
+                                  }}
+                                  className="w-full flex items-center justify-center gap-2 bg-zinc-100 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 active:scale-98 shadow-sm py-2 sm:py-2.5 px-3 cursor-pointer"
+                                >
+                                  <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+                                  <span className="whitespace-nowrap">Mark as Watched</span>
+                                </button>
+                              )
+                            ) : (
+                              <div className="flex items-center justify-between gap-1 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenWatchedModal(item, item.rating || 5);
+                                  }}
+                                  className="flex items-center gap-1 hover:bg-zinc-800/80 px-1.5 py-0.5 rounded-md transition-colors group/rate cursor-pointer"
+                                  title="Click to edit rating & date"
+                                >
+                                  <StarRating
+                                    value={item.rating || 0}
+                                    readOnly={true}
+                                    size="xs"
+                                    allowHalf={true}
+                                    showValueText={true}
+                                  />
+                                </button>
+
+                                <div className="flex items-center gap-1.5">
+                                  {isTv ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveTvDrawerMovie({ ...item, media_type: "tv" });
+                                      }}
+                                      className="text-[10px] sm:text-[11px] text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 px-2 py-0.5 rounded-lg font-semibold transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                                    >
+                                      <Tv className="w-3 h-3 text-amber-400 shrink-0" />
+                                      <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
+                                    </button>
+                                  ) : null}
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenWatchedModal(item, item.rating || 5);
+                                    }}
+                                    className="text-[10px] text-zinc-400 hover:text-amber-300 hover:bg-zinc-800/90 px-1.5 py-0.5 rounded-md border border-zinc-800 hover:border-amber-500/30 transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+                                    title="Edit rating & date"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                    <span className="hidden xs:inline">Edit</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
-                  </div>
+                  </SwipeableMovieCard>
                 );
               })
             )}
@@ -1487,38 +1969,61 @@ export default function App() {
           </>
         )}
 
-        {/* Floating Bottom Nav */}
-        <div id="floating-navigation" className="fixed bottom-5 sm:bottom-6 left-0 right-0 flex justify-center px-4 z-40 pointer-events-none">
-          <div className="flex items-center gap-1 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 p-1.5 rounded-2xl shadow-2xl max-w-sm w-full pointer-events-auto">
-            <button
-              id="nav-tab-towatch"
-              type="button"
-              onClick={() => setTab("towatch")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                tab === "towatch"
-                  ? "bg-zinc-100 text-zinc-950 shadow-md font-bold"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-              }`}
-            >
-              <Film className="w-4 h-4 shrink-0" />
-              <span>To Watch ({movies.length})</span>
-            </button>
+        {/* Floating Bottom Nav or Batch Management Bar */}
+        {isBatchMode ? (
+          <BatchManagementBar
+            selectedIds={selectedMovieIds}
+            totalCount={(tab === "towatch" ? displayMovies : displayWatched).length}
+            isWatchedTab={tab === "watched"}
+            allGenres={allGenres}
+            onSelectAll={() =>
+              handleSelectAllInView(
+                (tab === "towatch" ? displayMovies : displayWatched).map((m) => m.id)
+              )
+            }
+            onDeselectAll={handleDeselectAll}
+            onBatchMarkWatched={handleBatchMarkWatched}
+            onBatchMoveToWatchlist={handleBatchMoveToWatchlist}
+            onBatchDelete={handleBatchDelete}
+            onBatchAddGenre={handleBatchAddGenre}
+            onExitBatchMode={() => {
+              setIsBatchMode(false);
+              setSelectedMovieIds([]);
+            }}
+          />
+        ) : (
+          <div id="floating-navigation" className="fixed bottom-5 sm:bottom-6 left-0 right-0 flex justify-center px-4 z-40 pointer-events-none">
+            <div className="flex items-center gap-1 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 p-1.5 rounded-2xl shadow-2xl max-w-sm w-full pointer-events-auto">
+              <button
+                id="nav-tab-towatch"
+                type="button"
+                onClick={() => setTab("towatch")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  tab === "towatch"
+                    ? "bg-zinc-100 text-zinc-950 shadow-md font-bold"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                }`}
+              >
+                <Film className="w-4 h-4 shrink-0" />
+                <span>To Watch ({movies.length})</span>
+              </button>
 
-            <button
-              id="nav-tab-watched"
-              type="button"
-              onClick={() => setTab("watched")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                tab === "watched"
-                  ? "bg-zinc-100 text-zinc-950 shadow-md font-bold"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>Watched ({watched.length})</span>
-            </button>
+              <button
+                id="nav-tab-watched"
+                type="button"
+                onClick={() => setTab("watched")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  tab === "watched"
+                    ? "bg-zinc-100 text-zinc-950 shadow-md font-bold"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Watched ({watched.length})</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Mark Watched Modal */}
@@ -1701,25 +2206,51 @@ export default function App() {
                           onClick={() => {
                             handleOpenWatchedModal(detailMovie as WatchlistMovie, detailMovie.rating || 5);
                           }}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-500/25 transition-colors"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-500/25 transition-colors cursor-pointer"
                         >
                           <Edit3 className="w-3 h-3" />
-                          <span>Edit Rating & Date</span>
+                          <span>Edit Rating</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleMoveToWatchlist(detailMovie as WatchlistMovie);
+                            setDetailMovie(null);
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700 px-2 py-0.5 rounded-md border border-zinc-700 transition-colors cursor-pointer"
+                          title="Unmark watched and move back to To Watch"
+                        >
+                          <Bookmark className="w-3 h-3" />
+                          <span>Undo Watched</span>
                         </button>
                       </div>
                     )}
 
-                    {"watched" in detailMovie && !detailMovie.watched && !isItemTv(detailMovie) && (
-                      <div className="mt-2.5">
+                    {"watched" in detailMovie && !detailMovie.watched && (
+                      <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                        {!isItemTv(detailMovie) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleOpenWatchedModal(detailMovie as WatchlistMovie, 5);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow-sm cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Mark as Watched</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
-                            handleOpenWatchedModal(detailMovie as WatchlistMovie, 5);
+                            handleDelete((detailMovie as WatchlistMovie).id);
+                            setDetailMovie(null);
                           }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow-sm cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 border border-zinc-800 hover:border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                          title="Remove from Watchlist"
                         >
-                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          <span>Mark as Watched</span>
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove from Watchlist</span>
                         </button>
                       </div>
                     )}
@@ -1937,12 +2468,12 @@ export default function App() {
       />
 
       {/* Floating Action Button (FAB) - Elevated distinct floating button above nav bar */}
-      {tab !== "settings" && (
+      {tab !== "settings" && !isAnyModalOpen && (
         <button
           id="open-search-drawer-fab"
           type="button"
           onClick={() => setIsSearchDrawerOpen(true)}
-          className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:right-8 z-50 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-amber-500/30 border border-amber-400/60 font-bold text-sm tracking-tight cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group"
+          className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:right-8 z-40 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-amber-500/30 border border-amber-400/60 font-bold text-sm tracking-tight cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group animate-in fade-in duration-150"
           title="Search & Add to Bucklist (+)"
           aria-label="Add Movie or Series"
         >
@@ -1959,6 +2490,8 @@ export default function App() {
       <SearchAddDrawer
         isOpen={isSearchDrawerOpen}
         onClose={() => setIsSearchDrawerOpen(false)}
+        onToggleWatchlist={handleToggleWatchlist}
+        onToggleWatched={handleToggleWatched}
         onAddToWatchlist={handleAddToWatchlist}
         onAddToWatched={handleAddToWatched}
         existingWatchlistIds={existingWatchlistIds}

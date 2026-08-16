@@ -110,7 +110,7 @@ export async function searchMovies(query: string): Promise<SearchResult[]> {
       (item: { media_type?: string }) =>
         item.media_type === "movie" || item.media_type === "tv"
     )
-    .slice(0, 8);
+    .slice(0, 12);
 
   const [movieGenresRes, tvGenresRes] = await Promise.all([
     fetch(
@@ -199,6 +199,145 @@ export async function searchMovies(query: string): Promise<SearchResult[]> {
       }
     )
   );
+}
+
+export async function fetchCategorySuggestions(
+  category: "all" | "movie" | "tv" | "anime" = "all"
+): Promise<SearchResult[]> {
+  const tmdbKey = getTmdbApiKey();
+  let url = "";
+
+  if (category === "anime") {
+    // TMDB discover with Japanese animation genre 16
+    url = `https://api.themoviedb.org/3/discover/tv?api_key=${tmdbKey}&language=en-US&sort_by=popularity.desc&with_genres=16&with_original_language=ja&page=1`;
+  } else if (category === "movie") {
+    url = `https://api.themoviedb.org/3/trending/movie/week?api_key=${tmdbKey}&language=en-US&page=1`;
+  } else if (category === "tv") {
+    url = `https://api.themoviedb.org/3/trending/tv/week?api_key=${tmdbKey}&language=en-US&page=1`;
+  } else {
+    url = `https://api.themoviedb.org/3/trending/all/week?api_key=${tmdbKey}&language=en-US&page=1`;
+  }
+
+  const searchRes = await fetch(url);
+
+  if (!searchRes.ok) {
+    throw new Error(`TMDB suggestions failed (${searchRes.status})`);
+  }
+
+  const data = await searchRes.json();
+  const rawResults = (data.results || [])
+    .filter(
+      (item: { media_type?: string }) =>
+        category === "anime" ||
+        category === "tv" ||
+        category === "movie" ||
+        item.media_type === "movie" ||
+        item.media_type === "tv"
+    )
+    .slice(0, 16);
+
+  const [movieGenresRes, tvGenresRes] = await Promise.all([
+    fetch(
+      `https://api.themoviedb.org/3/genre/movie/list?api_key=${tmdbKey}&language=en-US`
+    ).catch(() => null),
+    fetch(
+      `https://api.themoviedb.org/3/genre/tv/list?api_key=${tmdbKey}&language=en-US`
+    ).catch(() => null),
+  ]);
+
+  const genreMap = new Map<number, string>();
+  if (movieGenresRes && movieGenresRes.ok) {
+    const gData = await movieGenresRes.json();
+    for (const g of gData.genres || []) genreMap.set(g.id, g.name);
+  }
+  if (tvGenresRes && tvGenresRes.ok) {
+    const gData = await tvGenresRes.json();
+    for (const g of gData.genres || []) genreMap.set(g.id, g.name);
+  }
+
+  return Promise.all(
+    rawResults.map(
+      async (m: {
+        id: number;
+        media_type?: "movie" | "tv";
+        title?: string;
+        name?: string;
+        poster_path: string | null;
+        release_date?: string | null;
+        first_air_date?: string | null;
+        overview: string | null;
+        genre_ids?: number[];
+      }) => {
+        const itemType =
+          m.media_type || (category === "anime" || category === "tv" ? "tv" : "movie");
+        const isTv = itemType === "tv";
+        const releaseDate = isTv ? m.first_air_date : m.release_date;
+        const provEndpoint = isTv ? "tv" : "movie";
+
+        let rawPlatforms: string[] = [];
+        try {
+          const provRes = await fetch(
+            `https://api.themoviedb.org/3/${provEndpoint}/${m.id}/watch/providers?api_key=${tmdbKey}`
+          );
+          if (provRes.ok) {
+            const provData = await provRes.json();
+            const regions = provData.results || {};
+            const platformSet = new Set<string>();
+
+            for (const regionCode of ["IN", "US", "GB", "CA"]) {
+              const region = regions[regionCode];
+              if (region?.flatrate) {
+                for (const p of region.flatrate as { provider_name: string }[]) {
+                  platformSet.add(p.provider_name);
+                }
+              }
+            }
+
+            if (platformSet.size === 0) {
+              const firstRegion = Object.values(regions)[0] as
+                | { flatrate?: { provider_name: string }[] }
+                | undefined;
+              if (firstRegion?.flatrate) {
+                for (const p of firstRegion.flatrate) {
+                  platformSet.add(p.provider_name);
+                }
+              }
+            }
+
+            rawPlatforms = Array.from(platformSet);
+          }
+        } catch {
+          // Optional provider fetch
+        }
+
+        // If anime, ensure "Animation" is in genres
+        const itemGenres = (m.genre_ids || [])
+          .map((id) => genreMap.get(id))
+          .filter((g): g is string => Boolean(g));
+
+        if (category === "anime" && !itemGenres.includes("Animation")) {
+          itemGenres.unshift("Animation");
+        }
+
+        return {
+          tmdb_id: m.id,
+          title: (isTv ? m.name : m.title) || "Untitled",
+          poster_path: m.poster_path,
+          release_year: releaseDate ? releaseDate.substring(0, 4) : null,
+          media_type: isTv ? "tv" : "movie",
+          overview: m.overview || null,
+          genres: itemGenres,
+          platforms: filterPopularPlatforms(rawPlatforms),
+        };
+      }
+    )
+  );
+}
+
+export async function fetchTrendingTitles(
+  mediaType: "all" | "movie" | "tv" = "all"
+): Promise<SearchResult[]> {
+  return fetchCategorySuggestions(mediaType);
 }
 
 export const POSTER_BASE = "https://image.tmdb.org/t/p/w342";

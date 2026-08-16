@@ -34,6 +34,15 @@ export const StarRating: React.FC<StarRatingProps> = ({
 
   const starSize = sizeClasses[size] || sizeClasses.md;
 
+  const starPixelSizes: Record<string, number> = {
+    xs: 12,
+    sm: 14,
+    md: 16,
+    lg: 24,
+    xl: 32,
+  };
+  const pxSize = starPixelSizes[size] || 16;
+
   const handlePointer = (starIndex: number, isLeftHalf: boolean) => {
     if (readOnly || !onChange) return;
     const rating = allowHalf && isLeftHalf ? starIndex - 0.5 : starIndex;
@@ -72,10 +81,13 @@ export const StarRating: React.FC<StarRatingProps> = ({
               {/* Filled Star Overlay (full or half) */}
               {(isFull || isHalf) && (
                 <div
-                  className="absolute inset-0 overflow-hidden pointer-events-none transition-all duration-150"
+                  className="absolute inset-0 overflow-hidden pointer-events-none"
                   style={{ width: isFull ? "100%" : "50%" }}
                 >
-                  <Star className={`${starSize} text-amber-400 fill-amber-400 shrink-0`} />
+                  <Star
+                    style={{ width: `${pxSize}px`, height: `${pxSize}px`, minWidth: `${pxSize}px` }}
+                    className="text-amber-400 fill-amber-400 shrink-0"
+                  />
                 </div>
               )}
 

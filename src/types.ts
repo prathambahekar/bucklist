@@ -70,5 +70,48 @@ export interface TvSeriesDetails {
   seasons: TvSeason[];
 }
 
-export type TabType = "towatch" | "watched";
+export type TabType = "towatch" | "watched" | "settings";
 export type SortByType = "newest" | "rating" | "release";
+export type ViewMode = "detailed" | "compact" | "grid" | "timeline";
+export type TimelinePeriod = "month" | "week" | "year";
+
+export interface BucklistBackupData {
+  version: string;
+  appName?: string;
+  exportedAt: string;
+  watchlist: WatchlistMovie[];
+  tvProgress?: Record<
+    number,
+    {
+      watchedEpisodes: string[];
+      totalEpisodes?: number;
+      seasonRatings?: Record<number, number>;
+      lastUpdated?: string;
+    }
+  >;
+  preferences?: {
+    toWatchViewMode?: "detailed" | "compact" | "grid";
+    watchedViewMode?: "detailed" | "compact" | "grid" | "timeline";
+    watchedCategory?: "all" | "movies" | "series" | "anime";
+    timelinePeriod?: TimelinePeriod;
+  };
+  stats?: {
+    totalItems: number;
+    toWatchCount: number;
+    watchedCount: number;
+    tvTrackedCount: number;
+  };
+}
+
+export interface ImportValidationResult {
+  valid: boolean;
+  error?: string;
+  data?: BucklistBackupData;
+  summary?: {
+    totalItems: number;
+    toWatchCount: number;
+    watchedCount: number;
+    tvSeriesCount: number;
+    tvProgressItemsCount: number;
+  };
+}

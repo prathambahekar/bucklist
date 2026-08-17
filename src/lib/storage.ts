@@ -1,8 +1,9 @@
-import type {
-  WatchlistMovie,
-  BucklistBackupData,
-  ImportValidationResult,
-  MovieCollection,
+import {
+  type WatchlistMovie,
+  type BucklistBackupData,
+  type ImportValidationResult,
+  type MovieCollection,
+  normalizePriority,
 } from "../types";
 import { normalizePlatformsList } from "./api";
 import { Capacitor } from "@capacitor/core";
@@ -28,6 +29,7 @@ export function getLocalWatchlist(): WatchlistMovie[] {
     const list: WatchlistMovie[] = JSON.parse(raw);
     return list.map((m) => ({
       ...m,
+      priority: normalizePriority(m.priority),
       platforms: normalizePlatformsList(m.platforms || []),
     }));
   } catch {
@@ -113,6 +115,25 @@ export type TimelinePeriod = "month" | "week" | "year";
 const TOWATCH_VIEW_MODE_KEY = "bucklist_towatch_view_mode_v2";
 const WATCHED_VIEW_MODE_KEY = "bucklist_watched_view_mode_v2";
 const TIMELINE_PERIOD_KEY = "bucklist_timeline_period_v1";
+const BLEND_ENABLED_KEY = "bucklist_blend_enabled_v1";
+
+export function getLocalBlendEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(BLEND_ENABLED_KEY);
+    if (raw === "false") return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+export function saveLocalBlendEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(BLEND_ENABLED_KEY, enabled ? "true" : "false");
+  } catch {
+    // ignore
+  }
+}
 
 export function getLocalToWatchViewMode(): ToWatchViewMode {
   try {
@@ -453,6 +474,7 @@ function sanitizeMovieItem(item: any): WatchlistMovie | null {
   const watchedSource = typeof item.watched_source === "string" ? item.watched_source : undefined;
   const watchedPlatform = typeof item.watched_platform === "string" ? item.watched_platform : null;
   const rating = typeof item.rating === "number" ? Math.max(0, Math.min(10, item.rating)) : null;
+  const priority = normalizePriority(item.priority);
   const createdAt = typeof item.created_at === "string" ? item.created_at : new Date().toISOString();
 
   return {
@@ -464,6 +486,7 @@ function sanitizeMovieItem(item: any): WatchlistMovie | null {
     media_type: mediaType,
     genres,
     platforms,
+    priority,
     watched,
     watched_date: watchedDate,
     watched_source: watchedSource,

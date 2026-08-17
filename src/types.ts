@@ -1,3 +1,94 @@
+export type PriorityLevel = "must_watch" | "very_interested" | "wanna_see" | "maybe_later";
+
+export interface PriorityConfig {
+  id: PriorityLevel;
+  label: string;
+  shortLabel: string;
+  rank: number; // 4 = must_watch, 3 = very_interested, 2 = wanna_see, 1 = maybe_later
+  description: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  dotBg: string;
+  hoverBg: string;
+  activeBg: string;
+}
+
+export const PRIORITY_CONFIGS: Record<PriorityLevel, PriorityConfig> = {
+  must_watch: {
+    id: "must_watch",
+    label: "Must Watch",
+    shortLabel: "Must Watch",
+    rank: 4,
+    description: "Highest priority • Watch next",
+    badgeBg: "bg-red-500/15",
+    badgeBorder: "border-red-500/40",
+    badgeText: "text-red-400",
+    dotBg: "bg-red-500",
+    hoverBg: "hover:bg-red-500/25",
+    activeBg: "bg-red-500 text-zinc-950 font-bold",
+  },
+  very_interested: {
+    id: "very_interested",
+    label: "Very Interested",
+    shortLabel: "Very Interested",
+    rank: 3,
+    description: "Strong interest • High priority",
+    badgeBg: "bg-amber-500/15",
+    badgeBorder: "border-amber-500/40",
+    badgeText: "text-amber-300",
+    dotBg: "bg-amber-400",
+    hoverBg: "hover:bg-amber-500/25",
+    activeBg: "bg-amber-500 text-zinc-950 font-bold",
+  },
+  wanna_see: {
+    id: "wanna_see",
+    label: "Wanna See",
+    shortLabel: "Wanna See",
+    rank: 2,
+    description: "Standard watchlist item",
+    badgeBg: "bg-zinc-800/80",
+    badgeBorder: "border-zinc-700/60",
+    badgeText: "text-zinc-300",
+    dotBg: "bg-zinc-400",
+    hoverBg: "hover:bg-zinc-750",
+    activeBg: "bg-zinc-200 text-zinc-950 font-bold",
+  },
+  maybe_later: {
+    id: "maybe_later",
+    label: "Maybe Later",
+    shortLabel: "Maybe Later",
+    rank: 1,
+    description: "Low priority • If in the mood",
+    badgeBg: "bg-sky-500/15",
+    badgeBorder: "border-sky-500/35",
+    badgeText: "text-sky-300",
+    dotBg: "bg-sky-400",
+    hoverBg: "hover:bg-sky-500/25",
+    activeBg: "bg-sky-500 text-zinc-950 font-bold",
+  },
+};
+
+export const PRIORITY_ORDER: PriorityLevel[] = [
+  "must_watch",
+  "very_interested",
+  "wanna_see",
+  "maybe_later",
+];
+
+export function normalizePriority(raw?: any): PriorityLevel {
+  if (raw === "must_watch") return "must_watch";
+  if (raw === "very_interested" || raw === "high") return "very_interested";
+  if (raw === "wanna_see" || raw === "normal") return "wanna_see";
+  if (raw === "maybe_later" || raw === "maybe") return "maybe_later";
+  return "wanna_see";
+}
+
+export function getPriorityConfig(priority?: PriorityLevel | string | null): PriorityConfig {
+  const norm = normalizePriority(priority);
+  return PRIORITY_CONFIGS[norm] || PRIORITY_CONFIGS.wanna_see;
+}
+
 export interface WatchlistMovie {
   id: string;
   tmdb_id: number;
@@ -7,6 +98,7 @@ export interface WatchlistMovie {
   media_type?: "movie" | "tv";
   genres: string[];
   platforms: string[];
+  priority?: PriorityLevel;
   watched: boolean;
   watched_date: string | null;
   watched_source?: "ott" | "theatre" | "other" | string;
@@ -72,7 +164,7 @@ export interface TvSeriesDetails {
   seasons: TvSeason[];
 }
 
-export type TabType = "towatch" | "watched" | "settings";
+export type TabType = "towatch" | "watched" | "blend" | "settings";
 export type SortByType = "newest" | "rating" | "release";
 export type ViewMode = "detailed" | "compact" | "grid" | "timeline" | "collections";
 export type WatchedViewMode = "detailed" | "compact" | "grid" | "timeline" | "collections";
@@ -90,12 +182,110 @@ export interface MovieCollection {
   cover_poster?: string | null;
 }
 
+// -------------------------------------------------------------
+// Blend (Collaboration) Types
+// -------------------------------------------------------------
+
+export interface BlendMemberMoviePref {
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  release_year: string | null;
+  genres: string[];
+  director?: string;
+  cast?: string[];
+  watched: boolean;
+  rating?: number | null;
+}
+
+export interface BlendMember {
+  id: string;
+  name: string;
+  avatar?: string;
+  color?: string; // e.g. "amber", "emerald", "sky", "violet", "rose"
+  isOwner?: boolean;
+  joinedAt: string;
+  personalMovies?: BlendMemberMoviePref[];
+}
+
+export interface BlendMovieRating {
+  memberId: string;
+  memberName: string;
+  rating: number; // 1-10 scale (or 0.5-5 mapped to 1-10)
+  ratedAt: string;
+}
+
+export interface BlendMovie {
+  id: string; // unique entry id in blend
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  backdrop_path?: string | null;
+  release_year: string | null;
+  media_type?: "movie" | "tv";
+  genres: string[];
+  platforms: string[];
+  runtime?: string;
+  director?: string;
+  cast?: string[];
+  vote_average?: number;
+  
+  addedByMemberId: string;
+  addedByMemberName: string;
+  addedAt: string;
+  
+  wantedByMemberIds: string[]; // array of member IDs who marked want to watch
+  
+  watchedTogether: boolean;
+  watchedDate: string | null;
+  ratings: Record<string, BlendMovieRating>; // memberId -> rating
+  notes?: string;
+}
+
+export interface Blend {
+  id: string;
+  name: string;
+  emoji: string;
+  inviteCode: string;
+  ownerId: string;
+  members: BlendMember[];
+  movies: BlendMovie[];
+  createdAt: string;
+  updatedAt: string;
+  description?: string;
+}
+
+export interface BlendTasteStats {
+  matchPercentage: number;
+  sharedMoviesCount: number;
+  totalUniqueMovies: number;
+  memberCounts: Record<string, { total: number; name: string }>;
+  commonGenres: { genre: string; count: number; synergy: number }[];
+  commonDirectors: { name: string; count: number; movies: string[] }[];
+  commonActors: { name: string; count: number; movies: string[] }[];
+  sharedFavorites: {
+    title: string;
+    poster_path: string | null;
+    release_year: string | null;
+    ratings: { memberName: string; rating: number }[];
+    avgRating: number;
+  }[];
+  biggestDisagreements: {
+    title: string;
+    poster_path: string | null;
+    release_year: string | null;
+    ratings: { memberName: string; rating: number }[];
+    diff: number;
+  }[];
+}
+
 export interface BucklistBackupData {
   version: string;
   appName?: string;
   exportedAt: string;
   watchlist: WatchlistMovie[];
   collections?: MovieCollection[];
+  blends?: Blend[];
   tvProgress?: Record<
     number,
     {

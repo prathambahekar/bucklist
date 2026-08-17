@@ -365,7 +365,7 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
     >
       <div
         id="episode-bottom-drawer"
-        className="w-full max-w-3xl h-[100dvh] sm:h-[92vh] max-h-[100dvh] sm:max-h-[92vh] bg-zinc-950 border-t sm:border border-zinc-800/90 rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden relative animate-in slide-in-from-bottom duration-300"
+        className="w-full max-w-3xl lg:max-w-4xl h-[100dvh] sm:h-[90vh] max-h-[100dvh] sm:max-h-[90vh] bg-zinc-950 border-t sm:border border-zinc-800/90 rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden relative animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header Banner with single unified background */}

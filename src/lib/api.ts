@@ -448,17 +448,17 @@ export const POSTER_BASE = "https://image.tmdb.org/t/p/w342";
 export const BACKDROP_BASE = "https://image.tmdb.org/t/p/w780";
 export const STILL_BASE = "https://image.tmdb.org/t/p/w300";
 
-export function getPosterUrl(posterPath: string | null): string | null {
+export function getPosterUrl(posterPath?: string | null): string | null {
   if (!posterPath) return null;
   return `${POSTER_BASE}${posterPath}`;
 }
 
-export function getBackdropUrl(backdropPath: string | null): string | null {
+export function getBackdropUrl(backdropPath?: string | null): string | null {
   if (!backdropPath) return null;
   return `${BACKDROP_BASE}${backdropPath}`;
 }
 
-export function getStillUrl(stillPath: string | null): string | null {
+export function getStillUrl(stillPath?: string | null): string | null {
   if (!stillPath) return null;
   return `${STILL_BASE}${stillPath}`;
 }

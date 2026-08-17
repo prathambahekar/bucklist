@@ -10,8 +10,14 @@ import {
   Sparkles,
   Star,
   Plus,
+  Flame,
 } from "lucide-react";
-import type { WatchlistMovie } from "../types";
+import {
+  type WatchlistMovie,
+  type PriorityLevel,
+  PRIORITY_CONFIGS,
+  PRIORITY_ORDER,
+} from "../types";
 
 interface BatchManagementBarProps {
   selectedIds: string[];
@@ -24,6 +30,7 @@ interface BatchManagementBarProps {
   onBatchMoveToWatchlist?: () => void;
   onBatchDelete: () => void;
   onBatchAddGenre?: (genre: string) => void;
+  onBatchSetPriority?: (priority: PriorityLevel) => void;
   onExitBatchMode: () => void;
 }
 
@@ -38,10 +45,12 @@ export function BatchManagementBar({
   onBatchMoveToWatchlist,
   onBatchDelete,
   onBatchAddGenre,
+  onBatchSetPriority,
   onExitBatchMode,
 }: BatchManagementBarProps) {
   const [showRatingMenu, setShowRatingMenu] = useState(false);
   const [showTagMenu, setShowTagMenu] = useState(false);
+  const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const [customTag, setCustomTag] = useState("");
 
   const count = selectedIds.length;
@@ -109,6 +118,64 @@ export function BatchManagementBar({
               <BookmarkPlus className="w-4 h-4 text-amber-400" />
               <span>To Watchlist</span>
             </button>
+          )}
+
+          {/* Batch Priority Setting (if on to watch tab) */}
+          {!isWatchedTab && onBatchSetPriority && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPriorityMenu(!showPriorityMenu);
+                  setShowTagMenu(false);
+                  setShowRatingMenu(false);
+                }}
+                disabled={count === 0}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                  showPriorityMenu
+                    ? "bg-zinc-800 border-amber-500/50 text-amber-300"
+                    : "bg-zinc-800/80 hover:bg-zinc-800 border-zinc-700 text-zinc-200"
+                } disabled:opacity-40 disabled:pointer-events-none`}
+                title="Set priority for selected items"
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>Priority</span>
+              </button>
+
+              {showPriorityMenu && (
+                <div className="absolute bottom-full mb-2 left-0 sm:left-auto sm:right-0 w-56 bg-zinc-950 border border-zinc-800 rounded-2xl p-2.5 shadow-2xl z-50 animate-in fade-in zoom-in-95">
+                  <div className="text-xs font-bold text-zinc-300 mb-2 px-1">
+                    Set Priority for {count} title{count === 1 ? "" : "s"}:
+                  </div>
+                  <div className="space-y-1">
+                    {PRIORITY_ORDER.map((level) => {
+                      const cfg = PRIORITY_CONFIGS[level];
+                      return (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => {
+                            onBatchSetPriority(level);
+                            setShowPriorityMenu(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-colors text-left hover:bg-zinc-850 cursor-pointer ${cfg.badgeText} border border-transparent hover:border-zinc-800`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dotBg}`} />
+                            <div>
+                              <div className="font-bold leading-tight text-zinc-200">{cfg.label}</div>
+                              <div className="text-[10px] text-zinc-400 font-normal">
+                                {cfg.description.split("•")[0]}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Batch Tag / Genre Popover */}

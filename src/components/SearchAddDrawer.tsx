@@ -27,6 +27,7 @@ interface SearchAddDrawerProps {
   existingWatchlistIds: Set<number>;
   existingWatchedIds: Set<number>;
   addingId: number | null;
+  onSelectMovie?: (item: SearchResult) => void;
 }
 
 type FilterCategory = "all" | "movie" | "tv" | "anime";
@@ -48,6 +49,7 @@ export function SearchAddDrawer({
   existingWatchlistIds,
   existingWatchedIds,
   addingId,
+  onSelectMovie,
 }: SearchAddDrawerProps) {
   const handleWatchlistAction = onToggleWatchlist || onAddToWatchlist;
   const handleWatchedAction = onToggleWatched || onAddToWatched;
@@ -193,10 +195,10 @@ export function SearchAddDrawer({
         aria-hidden="true"
       />
 
-      {/* Drawer Panel - Almost fullscreen (~88vh) with rounded corners and top gap */}
+      {/* Drawer Panel - Centered modal on desktop, bottom sheet on mobile */}
       <div
         id="search-add-drawer-panel"
-        className="relative w-full max-w-xl h-[88dvh] max-h-[88dvh] bg-zinc-950 border-t sm:border border-zinc-800/90 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col z-10 overflow-hidden animate-in slide-in-from-bottom duration-300"
+        className="relative w-full max-w-xl md:max-w-2xl lg:max-w-3xl h-[88dvh] max-h-[88dvh] sm:h-[85vh] sm:max-h-[85vh] bg-zinc-950 border-t sm:border border-zinc-800/90 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col z-10 overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Grab Handle indicator for mobile */}
@@ -414,7 +416,9 @@ export function SearchAddDrawer({
                 <div
                   key={`${item.media_type}-${item.tmdb_id}`}
                   id={`drawer-result-${item.tmdb_id}`}
-                  className="p-2.5 sm:p-3 rounded-2xl bg-zinc-900/40 hover:bg-zinc-900/70 transition-colors flex gap-3.5 group"
+                  onClick={() => onSelectMovie?.(item)}
+                  className="p-2.5 sm:p-3 rounded-2xl bg-zinc-900/40 hover:bg-zinc-900/80 border border-zinc-800/40 hover:border-zinc-700/80 transition-all flex gap-3.5 group cursor-pointer"
+                  title="Click to view details"
                 >
                   {/* Poster */}
                   <div className="relative w-16 sm:w-20 aspect-[2/3] rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 shrink-0 shadow-xs">
@@ -424,7 +428,7 @@ export function SearchAddDrawer({
                         "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
                       }
                       alt={item.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       referrerPolicy="no-referrer"
                     />
                   </div>
@@ -495,7 +499,10 @@ export function SearchAddDrawer({
                         type="button"
                         id={`btn-add-watchlist-${item.tmdb_id}`}
                         disabled={isProcessing}
-                        onClick={() => handleWatchlistAction?.(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleWatchlistAction?.(item);
+                        }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                           isWatchlist
                             ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
@@ -531,7 +538,10 @@ export function SearchAddDrawer({
                         type="button"
                         id={`btn-add-watched-${item.tmdb_id}`}
                         disabled={isProcessing}
-                        onClick={() => handleWatchedAction?.(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleWatchedAction?.(item);
+                        }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                           isWatched
                             ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40"

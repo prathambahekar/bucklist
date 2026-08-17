@@ -13,6 +13,8 @@ import {
   Send,
   ChevronRight,
   BarChart3,
+  Users,
+  Sparkles,
 } from "lucide-react";
 import {
   downloadBackupToStorage,
@@ -20,6 +22,8 @@ import {
   validateAndParseBackupJson,
   applyImportedBackup,
   resetAllLocalData,
+  getLocalBlendEnabled,
+  saveLocalBlendEnabled,
 } from "../lib/storage";
 import type { TvProgressMap } from "../lib/storage";
 import type { ImportValidationResult, WatchlistMovie } from "../types";
@@ -29,6 +33,8 @@ interface SettingsViewProps {
   watched: WatchlistMovie[];
   movies: WatchlistMovie[];
   tvProgressMap: TvProgressMap;
+  blendEnabled: boolean;
+  onToggleBlend: (enabled: boolean) => void;
   onDataUpdated: () => void;
   onNavigateToWatchlist?: () => void;
 }
@@ -37,6 +43,8 @@ export function SettingsView({
   watched,
   movies,
   tvProgressMap,
+  blendEnabled,
+  onToggleBlend,
   onDataUpdated,
   onNavigateToWatchlist,
 }: SettingsViewProps) {
@@ -254,7 +262,68 @@ export function SettingsView({
             </div>
           )}
 
-          {/* Compact Main Card */}
+          {/* Feature Preferences Card */}
+          <div className="bg-[#18181b] border border-zinc-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-400/15 border border-amber-400/25 flex items-center justify-center text-amber-400 shadow-sm shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-zinc-100 tracking-tight leading-tight">
+                  Preferences
+                </h2>
+                <p className="text-[11px] text-zinc-400 leading-tight mt-0.5">
+                  Customize app features & navigation
+                </p>
+              </div>
+            </div>
+
+            {/* Blend Toggle Row */}
+            <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-2xl p-3.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-amber-400 shrink-0">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-xs sm:text-sm font-bold text-zinc-100 truncate">
+                      Blend Mode
+                    </h3>
+                    <span className="text-[9px] bg-amber-400/20 text-amber-300 font-bold px-1.5 py-0.2 rounded-full border border-amber-400/30 font-mono">
+                      NEW
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-snug mt-0.5">
+                    Show the Blend tab for shared group watchlists & taste matching
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Switch */}
+              <button
+                id="toggle-blend-feature-btn"
+                type="button"
+                role="switch"
+                aria-checked={blendEnabled}
+                onClick={() => {
+                  const newVal = !blendEnabled;
+                  saveLocalBlendEnabled(newVal);
+                  onToggleBlend(newVal);
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  blendEnabled ? "bg-amber-400" : "bg-zinc-800"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-zinc-950 shadow-md ring-0 transition duration-200 ease-in-out ${
+                    blendEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Compact Main Data Card */}
           <div className="bg-[#18181b] border border-zinc-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4">
             {/* Card Header */}
             <div className="flex items-center justify-between pb-0.5">

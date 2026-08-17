@@ -107,9 +107,9 @@ export function updateSeriesSeasonRating(
   saveLocalTvProgress(all);
 }
 
-export type ViewMode = "detailed" | "compact" | "grid" | "timeline" | "collections";
+export type ViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline" | "collections";
 export type WatchedViewMode = ViewMode;
-export type ToWatchViewMode = "detailed" | "compact" | "grid";
+export type ToWatchViewMode = "detailed" | "compact" | "grid" | "cards";
 export type TimelinePeriod = "month" | "week" | "year";
 
 const TOWATCH_VIEW_MODE_KEY = "bucklist_towatch_view_mode_v2";
@@ -120,10 +120,10 @@ const BLEND_ENABLED_KEY = "bucklist_blend_enabled_v1";
 export function getLocalBlendEnabled(): boolean {
   try {
     const raw = localStorage.getItem(BLEND_ENABLED_KEY);
-    if (raw === "false") return false;
-    return true;
+    if (raw === "true") return true;
+    return false;
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -138,13 +138,13 @@ export function saveLocalBlendEnabled(enabled: boolean): void {
 export function getLocalToWatchViewMode(): ToWatchViewMode {
   try {
     const raw = localStorage.getItem(TOWATCH_VIEW_MODE_KEY);
-    if (raw === "detailed" || raw === "compact" || raw === "grid") {
+    if (raw === "detailed" || raw === "compact" || raw === "grid" || raw === "cards") {
       return raw;
     }
   } catch {
     // ignore
   }
-  return "grid";
+  return "cards";
 }
 
 export function saveLocalToWatchViewMode(mode: ToWatchViewMode): void {
@@ -181,7 +181,7 @@ export function saveLocalWatchedCategory(cat: WatchedCategory): void {
 export function getLocalWatchedViewMode(): WatchedViewMode {
   try {
     const raw = localStorage.getItem(WATCHED_VIEW_MODE_KEY);
-    if (raw === "detailed" || raw === "compact" || raw === "grid" || raw === "timeline" || raw === "collections") {
+    if (raw === "detailed" || raw === "compact" || raw === "grid" || raw === "cards" || raw === "timeline" || raw === "collections") {
       return raw;
     }
   } catch {
@@ -207,7 +207,7 @@ export function getLocalTimelinePeriod(): TimelinePeriod {
   } catch {
     // ignore
   }
-  return "month";
+  return "week";
 }
 
 export function saveLocalTimelinePeriod(period: TimelinePeriod): void {

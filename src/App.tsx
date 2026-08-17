@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   LayoutList,
   List,
+  Grid2X2,
   Sparkles,
   Clapperboard,
   FileJson,
@@ -77,11 +78,13 @@ import { WatchedTimelineView } from "./components/WatchedTimelineView";
 import { CollectionsView } from "./components/CollectionsView";
 import { AddToCollectionModal } from "./components/AddToCollectionModal";
 import { SearchAddDrawer } from "./components/SearchAddDrawer";
+import { SetPriorityModal } from "./components/SetPriorityModal";
 import { NotificationPopover } from "./components/NotificationPopover";
 import { SwipeableMovieCard } from "./components/SwipeableMovieCard";
 import { BatchManagementBar } from "./components/BatchManagementBar";
 import { BlendView } from "./components/BlendView";
 import { PriorityBadge } from "./components/PriorityBadge";
+import { FilterDrawer } from "./components/FilterDrawer";
 import {
   type WatchlistMovie,
   type SearchResult,
@@ -146,6 +149,18 @@ export default function App() {
   const [watchedViewMode, setWatchedViewMode] = useState<WatchedViewMode>(() =>
     getLocalWatchedViewMode()
   );
+  const [isDesktop, setIsDesktop] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 768 : true
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 768);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>(() =>
     getLocalTimelinePeriod()
   );
@@ -159,6 +174,10 @@ export default function App() {
   );
   const [addToCollectionMovie, setAddToCollectionMovie] = useState<WatchlistMovie | null>(null);
   const [blendEnabled, setBlendEnabled] = useState<boolean>(() => getLocalBlendEnabled());
+
+  // Priority modal state when adding to watchlist
+  const [priorityModalMovie, setPriorityModalMovie] = useState<SearchResult | WatchlistMovie | null>(null);
+  const [priorityModalInitial, setPriorityModalInitial] = useState<PriorityLevel>("wanna_see");
 
   // Batch Multi-Select Mode State
   const [isBatchMode, setIsBatchMode] = useState(false);
@@ -468,83 +487,91 @@ export default function App() {
     })();
   }, [detailMovie]);
 
+  const handleSelectPriorityAndAdd = useCallback(
+    (priority: PriorityLevel, item: SearchResult | WatchlistMovie) => {
+      const current = getLocalWatchlist();
+      const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
+      const existingInWatched = current.find((m) => m.tmdb_id === item.tmdb_id && m.watched);
+
+      if (existingInWatchlist) {
+        const updatedMovie: WatchlistMovie = {
+          ...existingInWatchlist,
+          priority,
+        };
+        const updated = current.map((m) => (m.id === existingInWatchlist.id ? updatedMovie : m));
+        saveLocalWatchlist(updated);
+        setMovies((prev) => prev.map((m) => (m.id === existingInWatchlist.id ? updatedMovie : m)));
+      } else if (existingInWatched) {
+        const unwatchedMovie: WatchlistMovie = {
+          ...existingInWatched,
+          watched: false,
+          watched_date: null,
+          priority,
+        };
+        const updated = current.map((m) => (m.id === existingInWatched.id ? unwatchedMovie : m));
+        saveLocalWatchlist(updated);
+        setWatched((prev) => prev.filter((m) => m.id !== existingInWatched.id));
+        setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.id !== existingInWatched.id)]);
+      } else {
+        const newRecord: WatchlistMovie = {
+          id: "wl_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6),
+          tmdb_id: item.tmdb_id,
+          title: item.title,
+          poster_path: item.poster_path,
+          release_year: item.release_year,
+          media_type: item.media_type,
+          genres: item.genres || [],
+          platforms: normalizePlatformsList(item.platforms || []),
+          priority,
+          watched: false,
+          watched_date: null,
+          rating: null,
+          created_at: new Date().toISOString(),
+        };
+        const updated = [newRecord, ...current];
+        saveLocalWatchlist(updated);
+        setMovies((prev) => [newRecord, ...prev]);
+      }
+      setPriorityModalMovie(null);
+      setAddingId(null);
+    },
+    []
+  );
+
   async function handleAdd(item: SearchResult) {
-    await handleAddToWatchlist(item);
+    handlePromptAddToWatchlist(item);
   }
 
-  const handleAddToWatchlist = useCallback(async (item: SearchResult) => {
-    setAddingId(item.tmdb_id);
-    const newRecord: WatchlistMovie = {
-      id: "wl_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6),
-      tmdb_id: item.tmdb_id,
-      title: item.title,
-      poster_path: item.poster_path,
-      release_year: item.release_year,
-      media_type: item.media_type,
-      genres: item.genres || [],
-      platforms: normalizePlatformsList(item.platforms || []),
-      priority: normalizePriority((item as any).priority),
-      watched: false,
-      watched_date: null,
-      rating: null,
-      created_at: new Date().toISOString(),
-    };
-
-    const current = getLocalWatchlist();
-    if (!current.some((m) => m.tmdb_id === item.tmdb_id)) {
-      const updated = [newRecord, ...current];
-      saveLocalWatchlist(updated);
-      setMovies((prev) => [newRecord, ...prev]);
-    }
-    setAddingId(null);
-  }, []);
-
-  const handleToggleWatchlist = useCallback(async (item: SearchResult) => {
-    setAddingId(item.tmdb_id);
+  const handlePromptAddToWatchlist = useCallback((item: SearchResult | WatchlistMovie) => {
     const current = getLocalWatchlist();
     const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
-    const existingInWatched = current.find((m) => m.tmdb_id === item.tmdb_id && m.watched);
-
     if (existingInWatchlist) {
-      // Re-clicking "In Watchlist" undoes the task: remove from watchlist
+      // Re-clicking "In Watchlist" in drawer removes/undoes
       const updated = current.filter((m) => m.id !== existingInWatchlist.id);
       saveLocalWatchlist(updated);
       setMovies((prev) => prev.filter((m) => m.id !== existingInWatchlist.id));
-    } else if (existingInWatched) {
-      // If it was in watched, move back to to-watch (unmarking watched)
-      const unwatchedMovie: WatchlistMovie = {
-        ...existingInWatched,
-        watched: false,
-        watched_date: null,
-        priority: normalizePriority(existingInWatched.priority),
-      };
-      const updated = current.map((m) => (m.id === existingInWatched.id ? unwatchedMovie : m));
-      saveLocalWatchlist(updated);
-      setWatched((prev) => prev.filter((m) => m.id !== existingInWatched.id));
-      setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.id !== existingInWatched.id)]);
     } else {
-      // Add to watchlist
-      const newRecord: WatchlistMovie = {
-        id: "wl_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6),
-        tmdb_id: item.tmdb_id,
-        title: item.title,
-        poster_path: item.poster_path,
-        release_year: item.release_year,
-        media_type: item.media_type,
-        genres: item.genres || [],
-        platforms: normalizePlatformsList(item.platforms || []),
-        priority: normalizePriority((item as any).priority),
-        watched: false,
-        watched_date: null,
-        rating: null,
-        created_at: new Date().toISOString(),
-      };
-      const updated = [newRecord, ...current];
-      saveLocalWatchlist(updated);
-      setMovies((prev) => [newRecord, ...prev]);
+      // Open priority picker modal
+      setPriorityModalMovie(item);
+      setPriorityModalInitial(
+        normalizePriority(("priority" in item && item.priority) ? item.priority : "wanna_see")
+      );
     }
-    setAddingId(null);
   }, []);
+
+  const handleAddToWatchlist = useCallback(
+    async (item: SearchResult) => {
+      handlePromptAddToWatchlist(item);
+    },
+    [handlePromptAddToWatchlist]
+  );
+
+  const handleToggleWatchlist = useCallback(
+    async (item: SearchResult) => {
+      handlePromptAddToWatchlist(item);
+    },
+    [handlePromptAddToWatchlist]
+  );
 
   const handleOpenWatchedModal = useCallback(
     (movie: WatchlistMovie, defaultRating?: number) => {
@@ -1135,7 +1162,8 @@ export default function App() {
         : 0;
 
     const isSelected = selectedMovieIds.includes(item.id);
-    const activeViewMode = tab === "towatch" ? toWatchViewMode : watchedViewMode;
+    const rawViewMode = tab === "towatch" ? toWatchViewMode : watchedViewMode;
+    const activeViewMode = rawViewMode === "compact" && isDesktop ? "detailed" : rawViewMode;
 
     // Swipe actions
     const handleCardSwipeRight = () => {
@@ -1153,6 +1181,77 @@ export default function App() {
     const itemPriority = normalizePriority(item.priority);
     // User request: "only show badges for must watch on the card"
     const showCardPriorityBadge = !isWatchedTab && itemPriority === "must_watch";
+
+    /* OPTION 0: Card / Thumbnail-only View Mode (Only small thumbnail poster, no details text) */
+    if (activeViewMode === "cards") {
+      return (
+        <SwipeableMovieCard
+          key={item.id}
+          id={`swipeable-card-${item.id}`}
+          isWatched={isWatchedTab}
+          disabled={isBatchMode}
+          onSwipeRight={handleCardSwipeRight}
+          onSwipeLeft={handleCardSwipeLeft}
+          rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
+          leftActionLabel="Delete"
+          className="h-full"
+        >
+          <div
+            id={`movie-card-${item.id}`}
+            onClick={() => {
+              if (isBatchMode) {
+                handleToggleSelectMovie(item.id);
+              } else {
+                setDetailMovie(item);
+              }
+            }}
+            onTouchStart={(e) => handleLongPressStart(item.id, e)}
+            onTouchEnd={handleLongPressStop}
+            onTouchMove={handleLongPressMove}
+            onTouchCancel={handleLongPressStop}
+            onMouseDown={() => handleLongPressStart(item.id)}
+            onMouseUp={handleLongPressStop}
+            onMouseLeave={handleLongPressStop}
+            className={`group relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-zinc-900 border transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer ${
+              isSelected
+                ? "border-amber-500 ring-2 ring-amber-500/50 scale-[0.98]"
+                : "border-zinc-800/80 hover:border-amber-500/50 hover:scale-[1.03]"
+            }`}
+            title={item.title}
+          >
+            {/* Small Thumbnail Image */}
+            <img
+              src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+              alt={item.title}
+              className="w-full h-full object-cover group-hover:brightness-105 transition-all duration-300"
+              referrerPolicy="no-referrer"
+              loading="lazy"
+            />
+
+            {/* Subtle Gradient vignette on hover for depth */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+            {/* Batch Selection Checkbox */}
+            {isBatchMode && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleSelectMovie(item.id);
+                }}
+                className={`absolute top-1.5 left-1.5 p-1 rounded-lg shadow-lg backdrop-blur-md transition-all ${
+                  isSelected
+                    ? "bg-amber-500 text-zinc-950 ring-2 ring-amber-400"
+                    : "bg-zinc-950/80 text-zinc-400 hover:text-zinc-100 border border-zinc-700"
+                }`}
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </SwipeableMovieCard>
+      );
+    }
 
     /* OPTION 1: Poster Grid View Mode */
     if (activeViewMode === "grid") {
@@ -1200,7 +1299,7 @@ export default function App() {
               />
 
               {/* Batch Selection Checkbox */}
-              {isBatchMode ? (
+              {isBatchMode && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1215,31 +1314,6 @@ export default function App() {
                 >
                   <CheckSquare className="w-4 h-4" />
                 </button>
-              ) : (
-                /* Top Left Badge: Star Rating (Watched) OR Priority Badge (ONLY Must Watch) */
-                isWatchedTab ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenWatchedModal(item, item.rating || 5);
-                    }}
-                    className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-zinc-950/85 backdrop-blur-md px-1.5 sm:px-2 py-0.5 rounded-lg border border-amber-500/35 text-amber-300 text-[11px] sm:text-xs font-bold shadow-md hover:bg-amber-500 hover:text-zinc-950 hover:border-amber-400 transition-colors group/rate"
-                    title="Click to edit rating"
-                  >
-                    <Star className="w-3 h-3 fill-amber-400 text-amber-400 group-hover/rate:fill-zinc-950 group-hover/rate:text-zinc-950 transition-colors" />
-                    <span>{item.rating ? `${item.rating}★` : "Rate"}</span>
-                  </button>
-                ) : showCardPriorityBadge ? (
-                  <div className="absolute top-1.5 left-1.5 flex items-center gap-1 z-10">
-                    <PriorityBadge
-                      priority="must_watch"
-                      size="xs"
-                      interactive={!isBatchMode}
-                      onSelectPriority={(newP) => handleUpdatePriority(item, newP)}
-                    />
-                  </div>
-                ) : null
               )}
 
               {/* Top Right: Delete Button */}
@@ -1354,7 +1428,7 @@ export default function App() {
       );
     }
 
-    /* OPTION 2: Compact Card View Mode */
+    /* OPTION 2: Compact Card View Mode - Sleek, Ambient-Themed & Decluttered */
     if (activeViewMode === "compact") {
       const firstOtt = isWatchedTab
         ? (item.watched_platform || (item.platforms || [])[0])
@@ -1387,164 +1461,149 @@ export default function App() {
             onMouseDown={() => handleLongPressStart(item.id)}
             onMouseUp={handleLongPressStop}
             onMouseLeave={handleLongPressStop}
-            className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-xl p-2 sm:p-2.5 flex items-center gap-2.5 sm:gap-3 transition-all duration-150 shadow-2xs hover:shadow-md cursor-pointer relative ${
+            className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-2.5 sm:p-3 flex items-center justify-between gap-3 sm:gap-4 transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative ${
               isSelected
                 ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
                 : "border-zinc-800/80 hover:border-amber-500/35"
             }`}
           >
-            {/* Checkbox for Batch Mode or Delete Button at Top Right */}
-            {isBatchMode ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleSelectMovie(item.id);
-                }}
-                className={`absolute top-2 right-2 p-1 rounded-lg transition-all shadow-xs z-10 ${
-                  isSelected
-                    ? "bg-amber-500 text-zinc-950 ring-2 ring-amber-400"
-                    : "bg-zinc-950 text-zinc-400 hover:text-zinc-200 border border-zinc-700"
-                }`}
-              >
-                <CheckSquare className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <button
-                id={`delete-btn-${item.id}`}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(item.id);
-                }}
-                className="absolute top-2 right-2 bg-zinc-950 hover:bg-red-950/80 text-zinc-500 hover:text-red-400 border border-zinc-800/90 hover:border-red-500/40 p-1 rounded-lg transition-colors shadow-2xs z-10 cursor-pointer"
-                title="Delete title"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
+            {/* Left Content Area: Thumbnail + Info */}
+            <div className="relative z-10 flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+              {/* Compact Poster Thumbnail */}
+              <div className="w-12 h-16 sm:w-13 sm:h-18 rounded-xl overflow-hidden bg-zinc-900 shrink-0 shadow-md ring-1 ring-white/10 relative">
+                <img
+                  src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+                  alt={item.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                />
+              </div>
 
-            {/* Compact Poster Thumbnail */}
-            <div className="w-11 h-16 sm:w-12 sm:h-17 rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-xs border border-zinc-800/80 relative">
-              <img
-                src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
-                alt={item.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-
-            {/* Info & Content */}
-            <div className="flex-1 min-w-0 flex flex-col justify-center gap-1 pr-7">
-              {/* Title */}
-              <h3
-                className="font-semibold text-xs sm:text-sm text-zinc-100 truncate group-hover:text-amber-400 transition-colors"
-                title={item.title}
-              >
-                {item.title}
-              </h3>
-
-              {/* Metadata & Inline Status */}
-              <div className="flex items-center gap-1.5 text-xs flex-wrap">
-                {/* To Watch Tab: Priority Badge ONLY for Must Watch */}
-                {showCardPriorityBadge && (
-                  <PriorityBadge
-                    priority="must_watch"
-                    size="xs"
-                    interactive={!isBatchMode}
-                    onSelectPriority={(newP) => handleUpdatePriority(item, newP)}
-                  />
-                )}
-
-                {/* Type Pill */}
-                {isItemAnime(item) ? (
-                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0 flex items-center gap-0.5">
-                    <Sparkles className="w-2.5 h-2.5" />
-                    <span>Anime</span>
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0">
-                    {isTv ? "TV" : "Movie"}
-                  </span>
-                )}
-
-                {/* Year */}
-                {item.release_year && (
-                  <span className="text-[11px] text-zinc-400 font-medium">
-                    {item.release_year}
-                  </span>
-                )}
-
-                {/* Single OTT Platform Badge */}
-                {firstOtt && (
-                  <OttBadge platform={firstOtt} size="xs" />
-                )}
-
-                {/* Watched Tab: Rating Pill */}
-                {!isBatchMode && isWatchedTab && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenWatchedModal(item, item.rating || 5);
-                    }}
-                    className="flex items-center gap-1 text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/25 text-[11px] font-bold transition-colors cursor-pointer shrink-0"
-                    title="Click to edit rating"
+              {/* Title & Streamlined Clean Metadata */}
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3
+                    className="font-semibold text-sm sm:text-[15px] text-zinc-100 truncate group-hover:text-amber-400 transition-colors leading-tight"
+                    title={item.title}
                   >
-                    <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                    <span>{item.rating ? `${item.rating}★` : "Rate"}</span>
-                  </button>
-                )}
+                    {item.title}
+                  </h3>
+                  {showCardPriorityBadge && (
+                    <PriorityBadge
+                      priority="must_watch"
+                      size="xs"
+                      interactive={!isBatchMode}
+                      onSelectPriority={(newP) => handleUpdatePriority(item, newP)}
+                    />
+                  )}
+                </div>
 
-                {/* Watched Tab TV episode badge if applicable */}
-                {!isBatchMode && isWatchedTab && isTv && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveTvDrawerMovie({ ...item, media_type: "tv" });
-                    }}
-                    className="text-[10px] text-zinc-400 hover:text-amber-300 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-zinc-700/60 font-medium transition-colors flex items-center gap-1 shrink-0"
-                    title="Track TV episodes"
-                  >
-                    <Tv className="w-2.5 h-2.5" />
-                    <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
-                  </button>
-                )}
+                {/* Minimalist Subtitle Line with dot separators instead of heavy colored boxes */}
+                <div className="flex items-center gap-1.5 text-xs text-zinc-400 flex-wrap">
+                  {item.release_year && (
+                    <span className="font-medium text-zinc-400">{item.release_year}</span>
+                  )}
 
-                {/* To Watch Tab: Quick Action */}
-                {!isBatchMode && !isWatchedTab && (
-                  <div className="shrink-0 flex items-center gap-1">
-                    {isTv ? (
+                  <span className="text-zinc-600">•</span>
+
+                  <span className="text-zinc-400">
+                    {isItemAnime(item) ? "Anime" : isTv ? "TV Series" : "Movie"}
+                  </span>
+
+                  {firstOtt && (
+                    <>
+                      <span className="text-zinc-600">•</span>
+                      <span className="text-amber-400/90 font-medium text-[11px] truncate max-w-[80px] sm:max-w-[120px]">
+                        {firstOtt}
+                      </span>
+                    </>
+                  )}
+
+                  {/* TV Episode Progress */}
+                  {isTv && (
+                    <>
+                      <span className="text-zinc-600">•</span>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setActiveTvDrawerMovie({ ...item, media_type: "tv" });
                         }}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-semibold transition-colors border border-zinc-700/60"
-                        title="Track TV episodes"
+                        className="inline-flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 font-medium hover:underline cursor-pointer"
+                        title="Track episodes"
                       >
-                        <ListOrdered className="w-3 h-3 text-amber-400" />
+                        <ListOrdered className="w-3 h-3 text-amber-400 shrink-0" />
                         <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenWatchedModal(item, 5);
-                        }}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-100 hover:bg-amber-400 text-zinc-950 text-[10px] font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
-                        title="Mark as Watched"
-                      >
-                        <Check className="w-3 h-3 stroke-[2.5]" />
-                        <span>Watched</span>
-                      </button>
-                    )}
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
+            </div>
+
+            {/* Right Action Controls */}
+            <div className="relative z-10 flex items-center gap-2 shrink-0">
+              {isBatchMode ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleSelectMovie(item.id);
+                  }}
+                  className={`p-1.5 rounded-xl transition-all shadow-xs ${
+                    isSelected
+                      ? "bg-amber-500 text-zinc-950 ring-2 ring-amber-400"
+                      : "bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-700"
+                  }`}
+                >
+                  <CheckSquare className="w-4 h-4" />
+                </button>
+              ) : isWatchedTab ? (
+                /* Watched Tab: Star Rating */
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenWatchedModal(item, item.rating || 5);
+                  }}
+                  className="flex items-center gap-1 bg-zinc-900/90 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded-xl border border-amber-500/30 text-xs font-bold transition-colors cursor-pointer"
+                  title="Click to edit rating"
+                >
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  <span>{item.rating ? `${item.rating}★` : "Rate"}</span>
+                </button>
+              ) : (
+                /* To Watch Tab: Sleek Watched Button */
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenWatchedModal(item, 5);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-100 hover:text-zinc-950 text-zinc-300 text-xs font-semibold border border-zinc-700/70 transition-all shadow-xs active:scale-95 cursor-pointer"
+                  title="Mark as Watched"
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[2.2]" />
+                  <span className="hidden xs:inline">Watched</span>
+                </button>
+              )}
+
+              {/* Discreet Delete Button */}
+              {!isBatchMode && (
+                <button
+                  id={`delete-btn-${item.id}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(item.id);
+                  }}
+                  className="p-1.5 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors opacity-80 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                  title="Delete title"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </SwipeableMovieCard>
@@ -1670,12 +1729,13 @@ export default function App() {
                 )}
               </div>
 
-              {/* OTT Badges with platform accent theme */}
+              {/* OTT Badges with platform accent theme - Top 3 max */}
               {(() => {
-                const displayPlatforms = isWatchedTab
+                const rawPlatforms = isWatchedTab
                   ? [item.watched_platform || (item.platforms && item.platforms[0])].filter(Boolean) as string[]
                   : (item.platforms || []);
-                if (!displayPlatforms.length) return null;
+                if (!rawPlatforms.length) return null;
+                const displayPlatforms = rawPlatforms.slice(0, 3);
                 return (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {displayPlatforms.map((p) => (
@@ -1868,33 +1928,22 @@ export default function App() {
             {/* Section Header & View Options Toolbar */}
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
               <div className="flex items-center gap-2">
-                {tab !== "watched" && (
-                  <>
-                    <h2 className="text-sm sm:text-base font-bold text-zinc-200">
-                      Watchlist
-                    </h2>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
-                      {displayMovies.length}
-                    </span>
-                  </>
-                )}
-
                 {/* Filter Toggle Button */}
                 <button
                   id="filter-toggle-btn"
                   type="button"
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                    showFilters || selectedGenre || selectedPlatform
-                      ? "bg-amber-500/15 border-amber-500/50 text-amber-400"
-                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    showFilters || selectedGenre || selectedPlatform || (tab === "towatch" && selectedPriorityFilter !== "all")
+                      ? "bg-amber-500/15 border-amber-500/50 text-amber-300 ring-1 ring-amber-500/30"
+                      : "bg-zinc-900/90 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
                   }`}
-                  title="Filter by OTT & Genre"
+                  title="Filter by Priority, OTT & Genre"
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Filters</span>
-                  {(selectedGenre || selectedPlatform) && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span>Filters</span>
+                  {(selectedGenre || selectedPlatform || (tab === "towatch" && selectedPriorityFilter !== "all")) && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                   )}
                 </button>
 
@@ -1959,12 +2008,12 @@ export default function App() {
                       ? handleSetToWatchViewMode("compact")
                       : handleSetWatchedViewMode("compact")
                   }
-                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  className={`flex md:hidden items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                     (tab === "towatch" ? toWatchViewMode : watchedViewMode) === "compact"
                       ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
                       : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
                   }`}
-                  title="Compact Cards"
+                  title="Compact Cards (Mobile only)"
                 >
                   <List className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Compact</span>
@@ -1987,6 +2036,25 @@ export default function App() {
                 >
                   <LayoutGrid className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Grid</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="view-opt-cards"
+                  onClick={() =>
+                    tab === "towatch"
+                      ? handleSetToWatchViewMode("cards")
+                      : handleSetWatchedViewMode("cards")
+                  }
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    (tab === "towatch" ? toWatchViewMode : watchedViewMode) === "cards"
+                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+                  }`}
+                  title="Card View (Small thumbnails only, no details)"
+                >
+                  <Grid2X2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Cards</span>
                 </button>
 
                 {tab === "watched" && (
@@ -2025,264 +2093,76 @@ export default function App() {
               </div>
             </div>
 
-            {/* Integrated Filter Strip when toggled or active */}
-            {(showFilters || selectedGenre || selectedPlatform) && (
-              <div id="filter-strip" className="mb-4 p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-xl">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                    Filter by OTT & Genre
+            {/* Active Filter Chips / Reset Bar if filters are on */}
+            {(selectedGenre ||
+              selectedPlatform ||
+              (tab === "towatch" && selectedPriorityFilter !== "all") ||
+              (tab === "watched" && watchedCategory !== "all")) && (
+              <div id="active-filter-chips" className="flex items-center gap-1.5 flex-wrap mb-3 px-1">
+                <span className="text-[11px] text-zinc-500 font-medium">Active Filters:</span>
+                {tab === "towatch" && selectedPriorityFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIGS[selectedPriorityFilter].dotBg}`} />
+                    <span>{PRIORITY_CONFIGS[selectedPriorityFilter].shortLabel}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPriorityFilter("all")}
+                      className="hover:text-white ml-0.5 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </span>
-                  {(selectedGenre || selectedPlatform) && (
+                )}
+                {tab === "watched" && watchedCategory !== "all" && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    <span>Type: {watchedCategory.charAt(0).toUpperCase() + watchedCategory.slice(1)}</span>
                     <button
-                      id="reset-filters-btn"
                       type="button"
-                      onClick={() => {
-                        setSelectedGenre(null);
-                        setSelectedPlatform(null);
-                      }}
-                      className="text-xs text-amber-400 hover:underline font-medium cursor-pointer"
+                      onClick={() => handleSetWatchedCategory("all")}
+                      className="hover:text-white ml-0.5 cursor-pointer"
                     >
-                      Reset all
+                      <X className="w-3 h-3" />
                     </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                  {/* All OTTs Pill */}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPlatform(null)}
-                    className={`px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors border cursor-pointer ${
-                      selectedPlatform === null
-                        ? "bg-amber-500 text-zinc-950 border-amber-500 font-semibold"
-                        : "bg-zinc-900 border-zinc-800 text-amber-400 hover:border-zinc-700"
-                    }`}
-                  >
-                    All OTTs
-                  </button>
-
-                  {/* List Platform Pills */}
-                  {allPlatforms.map((p) => {
-                    const active = selectedPlatform === p;
-                    const theme = getPlatformAccentTheme(p);
-                    return (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setSelectedPlatform(active ? null : p)}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer ${
-                          active
-                            ? `${theme.bg} ${theme.border} ${theme.text} ring-2 ring-amber-400/80 shadow-md scale-105`
-                            : `${theme.bg} ${theme.border} ${theme.text} opacity-80 hover:opacity-100`
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    );
-                  })}
-
-                  {/* Genre Selector Pill */}
-                  {allGenres.length > 0 && (
+                  </span>
+                )}
+                {selectedPlatform && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-200 border border-zinc-700/60">
+                    <span>OTT: {selectedPlatform}</span>
                     <button
-                      id="genre-picker-btn"
                       type="button"
-                      onClick={() => setGenreModalOpen(true)}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors border cursor-pointer ${
-                        selectedGenre
-                          ? "bg-amber-500 text-zinc-950 border-amber-500 font-semibold"
-                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                      }`}
+                      onClick={() => setSelectedPlatform(null)}
+                      className="hover:text-white ml-0.5 cursor-pointer"
                     >
-                      Genre: {selectedGenre || "All"} ▾
+                      <X className="w-3 h-3" />
                     </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-        {/* To Watch Section Priority Sub-Tabs & Sort Controls */}
-        {tab === "towatch" && (
-          <div id="towatch-priority-section" className="mb-3 space-y-2">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              {/* Priority Sub-Tabs */}
-              <div
-                id="towatch-priority-tabs"
-                className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 max-w-full scrollbar-none"
-              >
+                  </span>
+                )}
+                {selectedGenre && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-200 border border-zinc-700/60">
+                    <span>Genre: {selectedGenre}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedGenre(null)}
+                      className="hover:text-white ml-0.5 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
                 <button
                   type="button"
-                  id="priority-filter-all"
-                  onClick={() => setSelectedPriorityFilter("all")}
-                  className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                    selectedPriorityFilter === "all"
-                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                      : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-                  }`}
+                  onClick={() => {
+                    setSelectedGenre(null);
+                    setSelectedPlatform(null);
+                    setSelectedPriorityFilter("all");
+                    handleSetWatchedCategory("all");
+                  }}
+                  className="text-xs text-amber-400 hover:text-amber-300 underline font-medium ml-1 cursor-pointer"
                 >
-                  <span>All</span>
-                  <span
-                    className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                      selectedPriorityFilter === "all"
-                        ? "bg-zinc-950/25 text-zinc-950"
-                        : "bg-zinc-800 text-zinc-400"
-                    }`}
-                  >
-                    {priorityCounts.all}
-                  </span>
+                  Clear all
                 </button>
-
-                {PRIORITY_ORDER.map((level) => {
-                  const cfg = PRIORITY_CONFIGS[level];
-                  const count = priorityCounts[level];
-                  const isSelected = selectedPriorityFilter === level;
-
-                  return (
-                    <button
-                      key={level}
-                      type="button"
-                      id={`priority-filter-${level}`}
-                      onClick={() =>
-                        setSelectedPriorityFilter(isSelected ? "all" : level)
-                      }
-                      className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer border ${
-                        isSelected
-                          ? `${cfg.badgeBg} ${cfg.badgeText} ${cfg.badgeBorder} ring-2 ring-amber-400/40 shadow-xs font-bold`
-                          : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-800/80"
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dotBg}`} />
-                      <span>{cfg.label}</span>
-                      <span
-                        className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                          isSelected
-                            ? "bg-zinc-950/40 text-current"
-                            : "bg-zinc-800 text-zinc-400"
-                        }`}
-                      >
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
               </div>
-
-              {/* Sort By Dropdown / Selector */}
-              <div className="flex items-center gap-1.5 ml-auto text-xs text-zinc-400">
-                <span className="text-[11px] text-zinc-500 hidden sm:inline">Sort:</span>
-                <select
-                  id="towatch-sort-select"
-                  value={toWatchSortBy}
-                  onChange={(e) => setToWatchSortBy(e.target.value as any)}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500/60 cursor-pointer font-medium"
-                >
-                  <option value="priority">Priority (High → Low)</option>
-                  <option value="newest">Recently Added</option>
-                  <option value="release">Release Year</option>
-                  <option value="title">Title (A - Z)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Watched Section Sub-Tabs: All / Movies / Series / Animes */}
-        {tab === "watched" && (
-          <div
-            id="watched-category-tabs"
-            className="grid grid-cols-4 gap-1 sm:flex sm:items-center sm:gap-1.5 pb-1 mb-3 w-full"
-          >
-            <button
-              type="button"
-              id="watched-tab-all"
-              onClick={() => handleSetWatchedCategory("all")}
-              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                watchedCategory === "all"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-              }`}
-            >
-              <span>All</span>
-              <span
-                className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-bold ${
-                  watchedCategory === "all"
-                    ? "bg-zinc-950/25 text-zinc-950"
-                    : "bg-zinc-800 text-zinc-400"
-                }`}
-              >
-                {watchedCounts.all}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              id="watched-tab-movies"
-              onClick={() => handleSetWatchedCategory("movies")}
-              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                watchedCategory === "movies"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-              }`}
-            >
-              <Film className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-              <span className="truncate">Movies</span>
-              <span
-                className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-bold ${
-                  watchedCategory === "movies"
-                    ? "bg-zinc-950/25 text-zinc-950"
-                    : "bg-zinc-800 text-zinc-400"
-                }`}
-              >
-                {watchedCounts.movies}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              id="watched-tab-series"
-              onClick={() => handleSetWatchedCategory("series")}
-              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                watchedCategory === "series"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-              }`}
-            >
-              <Tv className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-              <span className="truncate">Series</span>
-              <span
-                className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-bold ${
-                  watchedCategory === "series"
-                    ? "bg-zinc-950/25 text-zinc-950"
-                    : "bg-zinc-800 text-zinc-400"
-                }`}
-              >
-                {watchedCounts.series}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              id="watched-tab-anime"
-              onClick={() => handleSetWatchedCategory("anime")}
-              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                watchedCategory === "anime"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-              }`}
-            >
-              <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400 shrink-0" />
-              <span className="truncate">Anime</span>
-              <span
-                className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded-full font-bold ${
-                  watchedCategory === "anime"
-                    ? "bg-zinc-950/25 text-zinc-950"
-                    : "bg-zinc-800 text-zinc-400"
-                }`}
-              >
-                {watchedCounts.anime}
-              </span>
-            </button>
-          </div>
-        )}
+            )}
 
         {/* Main Movie List or Timeline or Collections View */}
         {loading ? (
@@ -2373,23 +2253,26 @@ export default function App() {
         ) : tab === "towatch" ? (
           <div id="movie-priority-sections" className="space-y-6 sm:space-y-8">
             {toWatchGroupedByPriority.map((group) => {
+              const effectiveMode = toWatchViewMode === "compact" && isDesktop ? "detailed" : toWatchViewMode;
               const gridClass =
-                toWatchViewMode === "detailed"
+                effectiveMode === "detailed"
                   ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5"
-                  : toWatchViewMode === "compact"
+                  : effectiveMode === "compact"
                   ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-3.5"
+                  : effectiveMode === "cards"
+                  ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3"
                   : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4";
 
               return (
                 <section key={group.level} className="space-y-3">
-                  {/* Priority Section Header */}
-                  <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                  {/* Priority Section Header - Clean, borderless minimalist aesthetic */}
+                  <div className="flex items-center justify-between pb-1 pt-1">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${group.config.dotBg}`} />
                       <h3 className="text-xs sm:text-sm font-bold text-zinc-200 uppercase tracking-wider">
                         {group.config.label}
                       </h3>
-                      <span className="text-[11px] font-semibold text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">
+                      <span className="text-[11px] font-semibold text-zinc-400 bg-zinc-900 border border-zinc-800/80 px-2 py-0.5 rounded-full">
                         {group.items.length}
                       </span>
                     </div>
@@ -2410,10 +2293,12 @@ export default function App() {
           <div
             id="movie-grid"
             className={`grid gap-3 sm:gap-4 ${
-              watchedViewMode === "detailed"
+              (watchedViewMode === "compact" && isDesktop ? "detailed" : watchedViewMode) === "detailed"
                 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5"
-                : watchedViewMode === "compact"
+                : (watchedViewMode === "compact" && isDesktop ? "detailed" : watchedViewMode) === "compact"
                 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-3.5"
+                : (watchedViewMode === "compact" && isDesktop ? "detailed" : watchedViewMode) === "cards"
+                ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3"
                 : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4"
             }`}
           >
@@ -2651,6 +2536,14 @@ export default function App() {
                               <span>Mark as Watched</span>
                             </button>
                           )}
+                          <PriorityBadge
+                            priority={isDetailInWatchlist.priority || "normal"}
+                            size="sm"
+                            interactive={true}
+                            showDropdownArrow={true}
+                            onSelectPriority={(lvl) => handleUpdatePriority(isDetailInWatchlist, lvl)}
+                            className="px-2.5 py-1.5 rounded-xl cursor-pointer"
+                          />
                           <button
                             type="button"
                             onClick={() => {
@@ -2672,7 +2565,7 @@ export default function App() {
                             title="Remove from Watchlist"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                            <span>Remove from Watchlist</span>
+                            <span>Remove</span>
                           </button>
                         </div>
                       ) : (
@@ -2746,50 +2639,6 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-4 pr-1 pb-6">
-                    {/* Priority Selector for To Watch items */}
-                    {isDetailInWatchlist && (
-                      <div id="detail-priority-card" className="p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                            Watchlist Priority
-                          </span>
-                          <PriorityBadge
-                            priority={isDetailInWatchlist.priority || "normal"}
-                            size="xs"
-                            interactive={false}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                          {PRIORITY_ORDER.map((lvl) => {
-                            const cfg = PRIORITY_CONFIGS[lvl];
-                            const isSelected = (isDetailInWatchlist.priority || "normal") === lvl;
-
-                            return (
-                              <button
-                                key={lvl}
-                                type="button"
-                                id={`detail-set-priority-${lvl}`}
-                                onClick={() => handleUpdatePriority(isDetailInWatchlist, lvl)}
-                                className={`flex flex-col items-start p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                                  isSelected
-                                    ? `${cfg.badgeBg} ${cfg.badgeBorder} ${cfg.badgeText} ring-2 ring-amber-400/40 shadow-xs`
-                                    : "bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5 font-bold text-xs">
-                                  <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dotBg}`} />
-                                  <span>{cfg.label}</span>
-                                </div>
-                                <span className="text-[10px] text-zinc-500 line-clamp-1 mt-0.5">
-                                  {cfg.description}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
                     {/* Tagline */}
                     {detailExtra?.tagline && (
                       <p className="text-xs text-amber-400/90 italic border-l-2 border-amber-500/50 pl-3">
@@ -2977,6 +2826,41 @@ export default function App() {
         onRatingUpdated={handleRatingUpdated}
       />
 
+      {/* Top Filter & Sorting Drawer */}
+      <FilterDrawer
+        isOpen={showFilters}
+        onClose={() => setShowFilters(false)}
+        tab={tab}
+        selectedPriorityFilter={selectedPriorityFilter}
+        onSelectPriority={(p) => setSelectedPriorityFilter(p)}
+        priorityCounts={priorityCounts}
+        toWatchSortBy={toWatchSortBy}
+        onChangeToWatchSortBy={(sort) => setToWatchSortBy(sort)}
+        watchedCategory={watchedCategory}
+        onSelectWatchedCategory={handleSetWatchedCategory}
+        watchedCounts={watchedCounts}
+        timelinePeriod={timelinePeriod}
+        onChangeTimelinePeriod={handleSetTimelinePeriod}
+        allPlatforms={allPlatforms}
+        selectedPlatform={selectedPlatform}
+        onSelectPlatform={(platform) => setSelectedPlatform(platform)}
+        allGenres={allGenres}
+        selectedGenre={selectedGenre}
+        onSelectGenre={(genre) => setSelectedGenre(genre)}
+        onResetFilters={() => {
+          setSelectedGenre(null);
+          setSelectedPlatform(null);
+          setSelectedPriorityFilter("all");
+          handleSetWatchedCategory("all");
+        }}
+        hasActiveFilters={Boolean(
+          selectedGenre ||
+            selectedPlatform ||
+            (tab === "towatch" && selectedPriorityFilter !== "all") ||
+            (tab === "watched" && watchedCategory !== "all")
+        )}
+      />
+
       {/* Floating Action Button (FAB) - Elevated distinct floating button above nav bar */}
       {tab !== "settings" && tab !== "blend" && !isAnyModalOpen && (
         <button
@@ -2995,6 +2879,15 @@ export default function App() {
           </span>
         </button>
       )}
+
+      {/* Set Priority Modal when adding movie to Watchlist */}
+      <SetPriorityModal
+        isOpen={Boolean(priorityModalMovie)}
+        movie={priorityModalMovie}
+        initialPriority={priorityModalInitial}
+        onClose={() => setPriorityModalMovie(null)}
+        onSelectPriority={handleSelectPriorityAndAdd}
+      />
 
       {/* Search & Add Drawer */}
       <SearchAddDrawer

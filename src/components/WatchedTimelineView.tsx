@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from "react";
-import { Share } from "@capacitor/share";
 import {
   Calendar,
   CalendarDays,
@@ -9,12 +8,10 @@ import {
   Sparkles,
   Star,
   Trash2,
-  BookmarkMinus,
   ArrowUpDown,
   ListOrdered,
   ChevronDown,
   ChevronsUpDown,
-  Share2,
 } from "lucide-react";
 import type { WatchlistMovie, TimelinePeriod } from "../types";
 import type { TvProgressMap } from "../lib/storage";
@@ -36,7 +33,7 @@ interface WatchedTimelineViewProps {
   onItemClick: (item: WatchlistMovie) => void;
   onRateClick: (item: WatchlistMovie, rating: number) => void;
   onDeleteClick: (id: string) => void;
-  onMoveToWatchlistClick: (item: WatchlistMovie) => void;
+  onMoveToWatchlistClick?: (item: WatchlistMovie) => void;
   onUpdateWatchedDate: (item: WatchlistMovie, newDate: string) => void;
   onOpenTvDrawer: (item: WatchlistMovie) => void;
   tvProgressMap: TvProgressMap;
@@ -91,7 +88,6 @@ export function WatchedTimelineView({
   onItemClick,
   onRateClick,
   onDeleteClick,
-  onMoveToWatchlistClick,
   onUpdateWatchedDate,
   onOpenTvDrawer,
   tvProgressMap,
@@ -104,22 +100,6 @@ export function WatchedTimelineView({
       ...prev,
       [key]: !prev[key],
     }));
-  };
-
-  const handleShareClick = async (e: React.MouseEvent, item: WatchlistMovie) => {
-    e.stopPropagation();
-    try {
-      const isTv = item.media_type === "tv";
-      const shareText = `I just watched ${item.title}${item.release_year ? ` (${item.release_year})` : ""}!${item.rating ? ` I rated it ${item.rating}★.` : ""}`;
-      
-      await Share.share({
-        title: item.title,
-        text: shareText,
-        dialogTitle: `Share ${item.title}`,
-      });
-    } catch (err) {
-      console.warn("Error sharing:", err);
-    }
   };
 
   // Calculate overall stats
@@ -274,56 +254,13 @@ export function WatchedTimelineView({
   return (
     <div id="watched-timeline-container" className="w-full space-y-5 pb-36 sm:pb-24 animate-in fade-in duration-200">
       {/* Streamlined Timeline Controls Row */}
-      <div className="flex items-center justify-between gap-1.5 sm:gap-2 py-1 w-full flex-wrap sm:flex-nowrap">
-        {/* Period Selector (Month / Week / Year) */}
-        <div
-          id="timeline-period-tabs"
-          className="inline-flex items-center gap-0.5 bg-zinc-900 border border-zinc-800/80 p-0.5 rounded-xl shrink-0"
-        >
-          <button
-            type="button"
-            id="timeline-group-month-btn"
-            onClick={() => onPeriodChange("month")}
-            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
-              timelinePeriod === "month"
-                ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-            }`}
-            title="Group by Month"
-          >
-            <Calendar className="w-3 h-3" />
-            <span>Month</span>
-          </button>
-
-          <button
-            type="button"
-            id="timeline-group-week-btn"
-            onClick={() => onPeriodChange("week")}
-            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
-              timelinePeriod === "week"
-                ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-            }`}
-            title="Group by Week"
-          >
-            <CalendarRange className="w-3 h-3" />
-            <span>Week</span>
-          </button>
-
-          <button
-            type="button"
-            id="timeline-group-year-btn"
-            onClick={() => onPeriodChange("year")}
-            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
-              timelinePeriod === "year"
-                ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-            }`}
-            title="Group by Year"
-          >
-            <CalendarDays className="w-3 h-3" />
-            <span>Year</span>
-          </button>
+      <div className="flex items-center justify-between gap-1.5 sm:gap-2 py-0.5 w-full flex-wrap sm:flex-nowrap">
+        {/* Left: Grouping Period indicator */}
+        <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium">
+          <span className="text-zinc-500">Grouped by:</span>
+          <span className="capitalize font-semibold text-zinc-200 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-lg">
+            {timelinePeriod}
+          </span>
         </div>
 
         {/* Right: Expand/Collapse All + Sort Button & Summary stats */}
@@ -555,24 +492,6 @@ export function WatchedTimelineView({
                             <div className="flex items-center gap-1.5 ml-auto">
                               <button
                                 type="button"
-                                onClick={(e) => handleShareClick(e, item)}
-                                className="p-1.5 rounded-lg bg-zinc-950/70 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-zinc-800/80 transition-colors cursor-pointer"
-                                title="Share"
-                              >
-                                <Share2 className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => onMoveToWatchlistClick(item)}
-                                className="p-1.5 rounded-lg bg-zinc-950/70 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80 transition-colors cursor-pointer"
-                                title="Move back to watchlist"
-                              >
-                                <BookmarkMinus className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                type="button"
                                 onClick={() => onDeleteClick(item.id)}
                                 className="p-1.5 rounded-lg bg-zinc-950/70 hover:bg-red-950/80 text-zinc-500 hover:text-red-400 border border-zinc-800/80 hover:border-red-500/40 transition-colors cursor-pointer"
                                 title="Delete"
@@ -750,24 +669,6 @@ export function WatchedTimelineView({
 
                             {/* Quick Action Icons */}
                             <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={(e) => handleShareClick(e, item)}
-                                className="p-1 rounded-lg bg-zinc-950/80 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-zinc-800/80 transition-colors cursor-pointer"
-                                title="Share"
-                              >
-                                <Share2 className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => onMoveToWatchlistClick(item)}
-                                className="p-1 rounded-lg bg-zinc-950/80 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-zinc-800/80 transition-colors cursor-pointer"
-                                title="Move back to watchlist"
-                              >
-                                <BookmarkMinus className="w-3.5 h-3.5" />
-                              </button>
-
                               <button
                                 type="button"
                                 onClick={() => onDeleteClick(item.id)}

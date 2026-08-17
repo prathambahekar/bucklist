@@ -89,13 +89,15 @@ export function getPriorityConfig(priority?: PriorityLevel | string | null): Pri
   return PRIORITY_CONFIGS[norm] || PRIORITY_CONFIGS.wanna_see;
 }
 
+export type AppMode = "cinema" | "games";
+
 export interface WatchlistMovie {
   id: string;
   tmdb_id: number;
   title: string;
   poster_path: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv";
+  media_type?: "movie" | "tv" | "game";
   genres: string[];
   platforms: string[];
   priority?: PriorityLevel;
@@ -105,6 +107,8 @@ export interface WatchlistMovie {
   watched_platform?: string | null;
   rating: number | null;
   created_at: string;
+  metacritic?: number | null;
+  playtime?: number | null;
 }
 
 export interface SearchResult {
@@ -112,10 +116,12 @@ export interface SearchResult {
   title: string;
   poster_path: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv";
+  media_type?: "movie" | "tv" | "game";
   overview: string | null;
   genres: string[];
   platforms: string[];
+  metacritic?: number | null;
+  rating?: number | null;
 }
 
 export interface MovieDetailExtra {

@@ -450,16 +450,25 @@ export const STILL_BASE = "https://image.tmdb.org/t/p/w300";
 
 export function getPosterUrl(posterPath?: string | null): string | null {
   if (!posterPath) return null;
+  if (posterPath.startsWith("http://") || posterPath.startsWith("https://")) {
+    return posterPath;
+  }
   return `${POSTER_BASE}${posterPath}`;
 }
 
 export function getBackdropUrl(backdropPath?: string | null): string | null {
   if (!backdropPath) return null;
+  if (backdropPath.startsWith("http://") || backdropPath.startsWith("https://")) {
+    return backdropPath;
+  }
   return `${BACKDROP_BASE}${backdropPath}`;
 }
 
 export function getStillUrl(stillPath?: string | null): string | null {
   if (!stillPath) return null;
+  if (stillPath.startsWith("http://") || stillPath.startsWith("https://")) {
+    return stillPath;
+  }
   return `${STILL_BASE}${stillPath}`;
 }
 

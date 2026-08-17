@@ -127,6 +127,49 @@ export function getPlatformAccentTheme(name: string): {
     };
   }
 
+  if (lower.includes("steam") || lower === "pc" || lower.includes("windows")) {
+    return {
+      bg: "bg-slate-900/90 hover:bg-slate-800",
+      border: "border-sky-500/40 hover:border-sky-400/60",
+      text: "text-sky-300",
+    };
+  }
+  if (lower.includes("playstation") || lower.includes("ps5") || lower.includes("ps4") || lower.includes("ps3")) {
+    return {
+      bg: "bg-blue-950/80 hover:bg-blue-900/90",
+      border: "border-blue-500/50 hover:border-blue-400/70",
+      text: "text-blue-200",
+    };
+  }
+  if (lower.includes("xbox") || lower.includes("game pass") || lower.includes("series x") || lower.includes("series s")) {
+    return {
+      bg: "bg-emerald-950/80 hover:bg-emerald-900/90",
+      border: "border-emerald-500/50 hover:border-emerald-400/70",
+      text: "text-emerald-300",
+    };
+  }
+  if (lower.includes("nintendo") || lower.includes("switch")) {
+    return {
+      bg: "bg-red-950/80 hover:bg-red-900/90",
+      border: "border-red-500/50 hover:border-red-400/70",
+      text: "text-red-300",
+    };
+  }
+  if (lower.includes("epic") || lower.includes("gog") || lower.includes("ea ") || lower.includes("ubisoft")) {
+    return {
+      bg: "bg-zinc-800/90 hover:bg-zinc-750",
+      border: "border-zinc-500/50 hover:border-zinc-400/70",
+      text: "text-zinc-200",
+    };
+  }
+  if (lower.includes("ios") || lower.includes("android") || lower.includes("mobile")) {
+    return {
+      bg: "bg-amber-950/70 hover:bg-amber-900/80",
+      border: "border-amber-500/40 hover:border-amber-400/60",
+      text: "text-amber-300",
+    };
+  }
+
   return {
     bg: "bg-zinc-800/80 hover:bg-zinc-800",
     border: "border-zinc-700/60 hover:border-zinc-600",

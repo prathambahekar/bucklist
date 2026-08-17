@@ -33,10 +33,17 @@ import {
   Users,
   Flame,
   ArrowUpDown,
+  Gamepad2,
+  ArrowLeftRight,
 } from "lucide-react";
 import {
   getLocalWatchlist,
   saveLocalWatchlist,
+  getLocalGameWatchlist,
+  saveLocalGameWatchlist,
+  getLocalAppMode,
+  saveLocalAppMode,
+  AppMode,
   getLocalTvProgress,
   getSeriesSeasonRatings,
   getLocalWatchedViewMode,
@@ -70,6 +77,7 @@ import {
   detectMediaType,
   normalizePlatformsList,
 } from "./lib/api";
+import { fetchGameDetails } from "./lib/rawgApi";
 import { EpisodeDrawer } from "./components/EpisodeDrawer";
 import { StarRating } from "./components/StarRating";
 import { OttBadge, getPlatformAccentTheme } from "./components/OttBadge";

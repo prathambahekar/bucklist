@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Tv, Clapperboard, Bookmark, Check } from "lucide-react";
+import { Tv, Clapperboard, Bookmark, Check, Gamepad2 } from "lucide-react";
 import { getPlatformAccentTheme } from "./OttBadge";
+import type { AppMode } from "../types";
 
 export type WatchVenueType = "ott" | "theatre" | "other";
 
@@ -10,6 +11,7 @@ interface WatchVenuePopoverProps {
   moviePlatforms?: string[];
   onChange: (venue: WatchVenueType, platform: string) => void;
   compact?: boolean;
+  appMode?: AppMode;
 }
 
 const POPULAR_OTTS = [
@@ -29,13 +31,29 @@ const POPULAR_OTTS = [
   "MUBI",
 ];
 
+const POPULAR_GAMING_PLATFORMS = [
+  "PC",
+  "Steam",
+  "PlayStation 5",
+  "Xbox Series X/S",
+  "Xbox Game Pass",
+  "Nintendo Switch",
+  "PlayStation 4",
+  "Epic Games",
+  "GOG",
+  "GeForce NOW",
+  "Steam Deck",
+];
+
 export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
   venue = "ott",
   platform = "",
   moviePlatforms = [],
   onChange,
   compact = false,
+  appMode = "cinema",
 }) => {
+  const isGames = appMode === "games";
   const [isOpen, setIsOpen] = useState(false);
   const [customInput, setCustomInput] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -73,6 +91,12 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
 
   // Get human-friendly label for button
   const getButtonLabel = () => {
+    if (isGames) {
+      if (platform && platform !== "OTT" && platform !== "Other") {
+        return `🎮 ${platform}`;
+      }
+      return "🎮 Platform";
+    }
     if (venue === "theatre") {
       return "🎬 Theatre";
     }
@@ -105,7 +129,7 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
             ? "bg-zinc-800 text-white border-amber-500/60 ring-2 ring-amber-500/20"
             : ""
         }`}
-        title="Where did you watch this? (OTT / Theatre / Other)"
+        title={isGames ? "Which platform did you play on?" : "Where did you watch this? (OTT / Theatre / Other)"}
       >
         <span className="truncate max-w-[140px] sm:max-w-[170px]">
           {getButtonLabel()}
@@ -119,70 +143,18 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
           className="absolute right-0 sm:left-1/2 sm:-translate-x-1/2 bottom-full mb-2 z-50 w-72 sm:w-80 bg-zinc-950 border border-zinc-800 rounded-2xl p-3 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 text-left"
           style={{ maxWidth: "calc(100vw - 32px)" }}
         >
-          {/* Main Venue Selection (OTT, Theatre, Other) */}
-          <div className="flex items-center gap-1 p-1 bg-zinc-900 border border-zinc-800/80 rounded-xl mb-3">
-            {/* OTT Tab / Toggle */}
-            <button
-              type="button"
-              id="venue-tab-ott"
-              onClick={() => {
-                if (venue !== "ott") {
-                  onChange("ott", (moviePlatforms && moviePlatforms[0]) || "Netflix");
-                }
-              }}
-              className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                venue === "ott"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-              }`}
-            >
-              <Tv className="w-3.5 h-3.5 shrink-0" />
-              <span>OTT</span>
-            </button>
-
-            {/* Direct 1-tap Theatre */}
-            <button
-              type="button"
-              id="venue-tab-theatre"
-              onClick={() => handleSelectVenueAndPlatform("theatre", "Theatre")}
-              className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                venue === "theatre"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-              }`}
-            >
-              <Clapperboard className="w-3.5 h-3.5 shrink-0" />
-              <span>Theatre</span>
-            </button>
-
-            {/* Direct 1-tap Other */}
-            <button
-              type="button"
-              id="venue-tab-other"
-              onClick={() => handleSelectVenueAndPlatform("other", "Other")}
-              className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                venue === "other"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-              }`}
-            >
-              <Bookmark className="w-3.5 h-3.5 shrink-0" />
-              <span>Other</span>
-            </button>
-          </div>
-
-          {/* OTT Platform Options (Shown only when in OTT mode) */}
-          {venue === "ott" && (
-            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-              {/* Available on Title */}
+          {isGames ? (
+            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+              {/* Available Platforms on this Game */}
               {moviePlatforms && moviePlatforms.length > 0 && (
                 <div>
-                  <p className="text-[10px] uppercase font-bold text-amber-400/90 tracking-wider mb-1.5">
-                    Available on Title
+                  <p className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider mb-1.5 flex items-center gap-1">
+                    <Gamepad2 className="w-3 h-3" />
+                    <span>Game Platforms</span>
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {moviePlatforms.map((p) => {
-                      const isSelected = venue === "ott" && platform.toLowerCase() === p.toLowerCase();
+                      const isSelected = platform.toLowerCase() === p.toLowerCase();
                       const theme = getPlatformAccentTheme(p);
                       return (
                         <button
@@ -204,14 +176,14 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
                 </div>
               )}
 
-              {/* Popular OTTs */}
+              {/* All Gaming Platforms */}
               <div>
                 <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-1.5">
-                  Streaming Platform
+                  Popular Gaming Platforms
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {POPULAR_OTTS.map((p) => {
-                    const isSelected = venue === "ott" && platform.toLowerCase() === p.toLowerCase();
+                  {POPULAR_GAMING_PLATFORMS.map((p) => {
+                    const isSelected = platform.toLowerCase() === p.toLowerCase();
                     return (
                       <button
                         key={p}
@@ -231,14 +203,14 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
                 </div>
               </div>
 
-              {/* Custom OTT input */}
+              {/* Custom Game Platform input */}
               <form onSubmit={handleCustomSubmit} className="pt-1 border-t border-zinc-800/60">
                 <div className="flex items-center gap-1.5">
                   <input
                     type="text"
                     value={customInput}
                     onChange={(e) => setCustomInput(e.target.value)}
-                    placeholder="Other OTT name..."
+                    placeholder="Other gaming console/platform..."
                     className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/60"
                   />
                   <button
@@ -251,36 +223,173 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
                 </div>
               </form>
             </div>
-          )}
+          ) : (
+            <>
+              {/* Main Venue Selection (OTT, Theatre, Other) */}
+              <div className="flex items-center gap-1 p-1 bg-zinc-900 border border-zinc-800/80 rounded-xl mb-3">
+                {/* OTT Tab / Toggle */}
+                <button
+                  type="button"
+                  id="venue-tab-ott"
+                  onClick={() => {
+                    if (venue !== "ott") {
+                      onChange("ott", (moviePlatforms && moviePlatforms[0]) || "Netflix");
+                    }
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    venue === "ott"
+                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <Tv className="w-3.5 h-3.5 shrink-0" />
+                  <span>OTT</span>
+                </button>
 
-          {/* Other Venue Custom Name Input (Shown when in Other mode) */}
-          {venue === "other" && (
-            <div className="space-y-2.5 pt-1">
-              <form onSubmit={handleCustomSubmit} className="space-y-2">
-                <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">
-                  Custom Source / Name (Optional)
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={customInput}
-                    onChange={(e) => setCustomInput(e.target.value)}
-                    placeholder="e.g. Blu-ray, DVD, Flight, Web..."
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/60"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!customInput.trim()}
-                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    Set
-                  </button>
+                {/* Direct 1-tap Theatre */}
+                <button
+                  type="button"
+                  id="venue-tab-theatre"
+                  onClick={() => handleSelectVenueAndPlatform("theatre", "Theatre")}
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    venue === "theatre"
+                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <Clapperboard className="w-3.5 h-3.5 shrink-0" />
+                  <span>Theatre</span>
+                </button>
+
+                {/* Direct 1-tap Other */}
+                <button
+                  type="button"
+                  id="venue-tab-other"
+                  onClick={() => handleSelectVenueAndPlatform("other", "Other")}
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    venue === "other"
+                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <Bookmark className="w-3.5 h-3.5 shrink-0" />
+                  <span>Other</span>
+                </button>
+              </div>
+
+              {/* OTT Platform Options (Shown only when in OTT mode) */}
+              {venue === "ott" && (
+                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                  {/* Available on Title */}
+                  {moviePlatforms && moviePlatforms.length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-amber-400/90 tracking-wider mb-1.5">
+                        Available on Title
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {moviePlatforms.map((p) => {
+                          const isSelected = venue === "ott" && platform.toLowerCase() === p.toLowerCase();
+                          const theme = getPlatformAccentTheme(p);
+                          return (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => handleSelectVenueAndPlatform("ott", p)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+                                isSelected
+                                  ? "bg-amber-500 text-zinc-950 border-amber-400 font-bold shadow-xs"
+                                  : `${theme.bg} ${theme.border} ${theme.text} hover:opacity-90`
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              <span>{p}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Popular OTTs */}
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-1.5">
+                      Streaming Platform
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {POPULAR_OTTS.map((p) => {
+                        const isSelected = venue === "ott" && platform.toLowerCase() === p.toLowerCase();
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => handleSelectVenueAndPlatform("ott", p)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center gap-1 ${
+                              isSelected
+                                ? "bg-amber-500 text-zinc-950 border-amber-400 font-bold shadow-xs"
+                                : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 border-zinc-800"
+                            }`}
+                          >
+                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            <span>{p}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom OTT input */}
+                  <form onSubmit={handleCustomSubmit} className="pt-1 border-t border-zinc-800/60">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={customInput}
+                        onChange={(e) => setCustomInput(e.target.value)}
+                        placeholder="Other OTT name..."
+                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/60"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!customInput.trim()}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        Set
+                      </button>
+                    </div>
+                  </form>
                 </div>
-              </form>
-            </div>
+              )}
+
+              {/* Other Venue Custom Name Input (Shown when in Other mode) */}
+              {venue === "other" && (
+                <div className="space-y-2.5 pt-1">
+                  <form onSubmit={handleCustomSubmit} className="space-y-2">
+                    <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">
+                      Custom Source / Name (Optional)
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={customInput}
+                        onChange={(e) => setCustomInput(e.target.value)}
+                        placeholder="e.g. Blu-ray, DVD, Flight, Web..."
+                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/60"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!customInput.trim()}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        Set
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
     </div>
   );
 };
+

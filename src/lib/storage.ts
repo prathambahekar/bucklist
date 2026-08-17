@@ -3,6 +3,7 @@ import {
   type BucklistBackupData,
   type ImportValidationResult,
   type MovieCollection,
+  type AppMode,
   normalizePriority,
 } from "../types";
 import { normalizePlatformsList } from "./api";
@@ -11,7 +12,143 @@ import { Share } from "@capacitor/share";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 
 const LOCAL_STORAGE_KEY = "bucklist_local_watchlist_v1";
+const LOCAL_GAMES_STORAGE_KEY = "bucklist_local_games_v1";
+const APP_MODE_STORAGE_KEY = "bucklist_app_mode_v1";
 const TV_PROGRESS_KEY = "bucklist_tv_progress_v1";
+
+// App Mode State ("cinema" | "games")
+export function getLocalAppMode(): AppMode {
+  try {
+    const raw = localStorage.getItem(APP_MODE_STORAGE_KEY);
+    if (raw === "games" || raw === "cinema") return raw;
+  } catch {
+    // ignore
+  }
+  return "cinema";
+}
+
+export function saveLocalAppMode(mode: AppMode): void {
+  try {
+    localStorage.setItem(APP_MODE_STORAGE_KEY, mode);
+  } catch {
+    // ignore
+  }
+}
+
+// Initial sample games for new users
+const DEFAULT_SAMPLE_GAMES: WatchlistMovie[] = [
+  {
+    id: "game-seed-1",
+    tmdb_id: 3272,
+    title: "Elden Ring",
+    poster_path: "https://media.rawg.io/media/games/b29/b29cd0c0b4de0d0c62437702680bc4f0.jpg",
+    release_year: "2022",
+    media_type: "game",
+    genres: ["RPG", "Action"],
+    platforms: ["PC", "PlayStation 5", "Xbox Series X/S"],
+    priority: "must_watch",
+    watched: false,
+    watched_date: null,
+    rating: null,
+    metacritic: 96,
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+  },
+  {
+    id: "game-seed-2",
+    tmdb_id: 494384,
+    title: "Baldur's Gate 3",
+    poster_path: "https://media.rawg.io/media/games/699/699222c652e1179699564d9944d1030e.jpg",
+    release_year: "2023",
+    media_type: "game",
+    genres: ["RPG", "Strategy"],
+    platforms: ["PC", "PlayStation 5", "Xbox Series X/S"],
+    priority: "very_interested",
+    watched: false,
+    watched_date: null,
+    rating: null,
+    metacritic: 96,
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+  {
+    id: "game-seed-3",
+    tmdb_id: 41494,
+    title: "Cyberpunk 2077",
+    poster_path: "https://media.rawg.io/media/games/26d/26d44377d59b07a4122d28f804b0b64d.jpg",
+    release_year: "2020",
+    media_type: "game",
+    genres: ["Action", "RPG", "Adventure"],
+    platforms: ["PC", "PlayStation 5", "Xbox Series X/S"],
+    priority: "wanna_see",
+    watched: false,
+    watched_date: null,
+    rating: null,
+    metacritic: 86,
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    id: "game-seed-4",
+    tmdb_id: 3328,
+    title: "The Witcher 3: Wild Hunt",
+    poster_path: "https://media.rawg.io/media/games/618/618c2031a07bbff6b4f611f10f6bcd13.jpg",
+    release_year: "2015",
+    media_type: "game",
+    genres: ["RPG", "Action", "Adventure"],
+    platforms: ["PC", "PlayStation 5", "Nintendo Switch"],
+    priority: "must_watch",
+    watched: true,
+    watched_date: new Date(Date.now() - 86400000 * 12).toISOString().split("T")[0],
+    watched_source: "PC",
+    watched_platform: "Steam",
+    rating: 5,
+    metacritic: 92,
+    created_at: new Date(Date.now() - 86400000 * 20).toISOString(),
+  },
+  {
+    id: "game-seed-5",
+    tmdb_id: 58175,
+    title: "God of War (2018)",
+    poster_path: "https://media.rawg.io/media/games/4be/4be6a6ad0364723a962f08d0397acb47.jpg",
+    release_year: "2018",
+    media_type: "game",
+    genres: ["Action", "Adventure"],
+    platforms: ["PlayStation 4", "PlayStation 5", "PC"],
+    priority: "must_watch",
+    watched: true,
+    watched_date: new Date(Date.now() - 86400000 * 28).toISOString().split("T")[0],
+    watched_source: "PlayStation",
+    watched_platform: "PlayStation 5",
+    rating: 5,
+    metacritic: 94,
+    created_at: new Date(Date.now() - 86400000 * 35).toISOString(),
+  },
+];
+
+export function getLocalGameWatchlist(): WatchlistMovie[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_GAMES_STORAGE_KEY);
+    if (!raw) {
+      // Seed default games on first visit
+      saveLocalGameWatchlist(DEFAULT_SAMPLE_GAMES);
+      return DEFAULT_SAMPLE_GAMES;
+    }
+    const list: WatchlistMovie[] = JSON.parse(raw);
+    return list.map((m) => ({
+      ...m,
+      priority: normalizePriority(m.priority),
+      platforms: m.platforms || [],
+    }));
+  } catch {
+    return DEFAULT_SAMPLE_GAMES;
+  }
+}
+
+export function saveLocalGameWatchlist(items: WatchlistMovie[]): void {
+  try {
+    localStorage.setItem(LOCAL_GAMES_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // ignore
+  }
+}
 
 export interface TvProgressMap {
   [tmdbId: number]: {
@@ -243,10 +380,12 @@ export function saveLocalTimelinePeriod(period: TimelinePeriod): void {
 
 export function createBackupPayload(): BucklistBackupData {
   const watchlist = getLocalWatchlist();
+  const gameWatchlist = getLocalGameWatchlist();
   const tvProgress = getLocalTvProgress();
   const toWatchViewMode = getLocalToWatchViewMode();
   const watchedViewMode = getLocalWatchedViewMode();
   const watchedCategory = getLocalWatchedCategory();
+  const appMode = getLocalAppMode();
 
   let collections: MovieCollection[] = [];
   try {
@@ -265,15 +404,17 @@ export function createBackupPayload(): BucklistBackupData {
     appName: "Bucklist",
     exportedAt: new Date().toISOString(),
     watchlist,
+    gameWatchlist,
     collections,
     tvProgress,
     preferences: {
       toWatchViewMode,
       watchedViewMode,
       watchedCategory,
+      appMode,
     },
     stats: {
-      totalItems: watchlist.length,
+      totalItems: watchlist.length + gameWatchlist.length,
       toWatchCount,
       watchedCount,
       tvTrackedCount,
@@ -465,7 +606,7 @@ export function downloadBackupFile(customName?: string): boolean {
   return true;
 }
 
-function sanitizeMovieItem(item: any): WatchlistMovie | null {
+export function sanitizeMovieItem(item: any): WatchlistMovie | null {
   if (!item || typeof item !== "object") return null;
 
   // TMDB id must exist and be numeric
@@ -477,7 +618,9 @@ function sanitizeMovieItem(item: any): WatchlistMovie | null {
   const id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : `movie-${tmdbIdNum}-${Date.now()}`;
   const posterPath = typeof item.poster_path === "string" ? item.poster_path : null;
   const releaseYear = item.release_year ? String(item.release_year) : null;
-  const mediaType = item.media_type === "tv" || item.media_type === "movie" ? item.media_type : undefined;
+  const mediaType = item.media_type === "tv" || item.media_type === "movie" || item.media_type === "game" ? item.media_type : undefined;
+  const metacritic = typeof item.metacritic === "number" ? item.metacritic : undefined;
+  const playtime = typeof item.playtime === "number" ? item.playtime : undefined;
 
   const genres = Array.isArray(item.genres)
     ? item.genres.filter((g: any) => typeof g === "string")
@@ -503,6 +646,8 @@ function sanitizeMovieItem(item: any): WatchlistMovie | null {
     poster_path: posterPath,
     release_year: releaseYear,
     media_type: mediaType,
+    metacritic,
+    playtime,
     genres,
     platforms,
     priority,

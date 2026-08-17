@@ -75,8 +75,16 @@ export function PickTonightModal({
 
   if (!isOpen) return null;
 
-  const posterUrl = selectedMovie ? getPosterUrl(selectedMovie.poster_path) : null;
-  const backdropUrl = selectedMovie ? getBackdropUrl(selectedMovie.backdrop_path) : null;
+  const posterUrl = selectedMovie
+    ? selectedMovie.poster_path?.startsWith("http")
+      ? selectedMovie.poster_path
+      : getPosterUrl(selectedMovie.poster_path)
+    : null;
+  const backdropUrl = selectedMovie
+    ? selectedMovie.backdrop_path?.startsWith("http")
+      ? selectedMovie.backdrop_path
+      : getBackdropUrl(selectedMovie.backdrop_path)
+    : null;
 
   return (
     <div

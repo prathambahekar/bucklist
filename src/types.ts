@@ -164,7 +164,7 @@ export interface TvSeriesDetails {
   seasons: TvSeason[];
 }
 
-export type TabType = "towatch" | "watched" | "blend" | "settings";
+export type TabType = "towatch" | "watched" | "blend" | "settings" | "profile";
 export type SortByType = "newest" | "rating" | "release";
 export type ViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline" | "collections";
 export type WatchedViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline" | "collections";

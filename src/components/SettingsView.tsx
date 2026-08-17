@@ -16,6 +16,9 @@ import {
   Users,
   Layers,
   Code2,
+  KeyRound,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import {
   downloadBackupToStorage,
@@ -28,6 +31,13 @@ import {
   getLocalCollectionsEnabled,
   saveLocalCollectionsEnabled,
 } from "../lib/storage";
+import {
+  getSupabaseConfig,
+  setSupabaseConfig,
+  resetSupabaseConfig,
+  testSupabaseConnection,
+  SUPABASE_SQL_SETUP,
+} from "../lib/supabase";
 import type { TvProgressMap } from "../lib/storage";
 import type { ImportValidationResult, WatchlistMovie } from "../types";
 import { StatsView } from "./StatsView";
@@ -73,6 +83,14 @@ export function SettingsView({
   const [validationResult, setValidationResult] = useState<ImportValidationResult | null>(null);
   const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Supabase Config State
+  const [sbConfig, setSbConfig] = useState(() => getSupabaseConfig());
+  const [sbUrlInput, setSbUrlInput] = useState(() => getSupabaseConfig().url);
+  const [sbKeyInput, setSbKeyInput] = useState(() => (getSupabaseConfig().isCustom ? getSupabaseConfig().key : ""));
+  const [sbStatusMsg, setSbStatusMsg] = useState<{ text: string; isError?: boolean } | null>(null);
+  const [showSqlSetup, setShowSqlSetup] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -554,6 +572,169 @@ export function SettingsView({
                 <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-red-400 group-hover:translate-x-0.5 transition-all" />
               </button>
             </div>
+          </div>
+
+          {/* Supabase Cloud Storage & Database Card */}
+          <div className="bg-[#18181b] border border-zinc-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shadow-sm shrink-0">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-zinc-100 tracking-tight leading-tight">
+                    Supabase Cloud Database
+                  </h2>
+                  <p className="text-[11px] text-zinc-400 leading-tight mt-0.5">
+                    Connect your Supabase project for real-time cloud sync & auth
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  sbConfig.isCustom
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                }`}
+              >
+                {sbConfig.isCustom ? "Custom Connected" : "Local Sandbox"}
+              </span>
+            </div>
+
+            {/* Notification alert */}
+            {sbStatusMsg && (
+              <div
+                className={`p-3 rounded-2xl text-xs flex items-center gap-2 border ${
+                  sbStatusMsg.isError
+                    ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                }`}
+              >
+                {sbStatusMsg.isError ? (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                )}
+                <span>{sbStatusMsg.text}</span>
+              </div>
+            )}
+
+            {/* Inputs */}
+            <div className="space-y-3 pt-1">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold text-zinc-300">
+                  Supabase Project URL
+                </label>
+                <input
+                  type="text"
+                  value={sbUrlInput}
+                  onChange={(e) => setSbUrlInput(e.target.value)}
+                  placeholder="https://your-project.supabase.co"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-400/50"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold text-zinc-300">
+                  Supabase Anon Key
+                </label>
+                <input
+                  type="password"
+                  value={sbKeyInput}
+                  onChange={(e) => setSbKeyInput(e.target.value)}
+                  placeholder="eyJhbGciOiJIUzI1NiIsIn..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-400/50"
+                />
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const test = await testSupabaseConnection();
+                    setSbStatusMsg({ text: test.message, isError: !test.success });
+                    setTimeout(() => setSbStatusMsg(null), 5000);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-750 text-xs font-semibold text-zinc-300 transition-colors cursor-pointer"
+                >
+                  Test Connection
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSqlSetup(!showSqlSetup)}
+                  className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-750 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                >
+                  {showSqlSetup ? "Hide SQL" : "View SQL Table"}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {sbConfig.isCustom && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetSupabaseConfig();
+                      setSbConfig(getSupabaseConfig());
+                      setSbUrlInput(getSupabaseConfig().url);
+                      setSbKeyInput("");
+                      setSbStatusMsg({ text: "Reset to default configuration." });
+                      setTimeout(() => setSbStatusMsg(null), 3000);
+                    }}
+                    className="px-2.5 py-2 rounded-xl text-xs text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!sbUrlInput.trim() || !sbKeyInput.trim()) {
+                      setSbStatusMsg({
+                        text: "Please enter both Supabase URL and Anon Key.",
+                        isError: true,
+                      });
+                      return;
+                    }
+                    const ok = setSupabaseConfig(sbUrlInput, sbKeyInput);
+                    if (ok) {
+                      setSbConfig(getSupabaseConfig());
+                      setSbStatusMsg({ text: "Supabase keys saved successfully!" });
+                      setTimeout(() => setSbStatusMsg(null), 3500);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all cursor-pointer shadow-md"
+                >
+                  Save Keys
+                </button>
+              </div>
+            </div>
+
+            {/* SQL Table snippet */}
+            {showSqlSetup && (
+              <div className="pt-2 space-y-2 border-t border-zinc-800 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between text-xs text-zinc-400">
+                  <span>Supabase SQL Table Schema:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(SUPABASE_SQL_SETUP);
+                      setSqlCopied(true);
+                      setTimeout(() => setSqlCopied(false), 2500);
+                    }}
+                    className="flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{sqlCopied ? "Copied!" : "Copy SQL"}</span>
+                  </button>
+                </div>
+                <pre className="p-3 bg-zinc-950 border border-zinc-800/80 rounded-xl text-[11px] font-mono text-zinc-300 overflow-x-auto whitespace-pre leading-relaxed">
+                  {SUPABASE_SQL_SETUP}
+                </pre>
+              </div>
+            )}
           </div>
         </div>
       )}

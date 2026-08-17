@@ -465,7 +465,7 @@ export function downloadBackupFile(customName?: string): boolean {
   return true;
 }
 
-function sanitizeMovieItem(item: any): WatchlistMovie | null {
+export function sanitizeMovieItem(item: any): WatchlistMovie | null {
   if (!item || typeof item !== "object") return null;
 
   // TMDB id must exist and be numeric

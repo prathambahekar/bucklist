@@ -35,6 +35,8 @@ interface FilterDrawerProps {
   };
   toWatchSortBy: "priority" | "newest" | "release" | "title";
   onChangeToWatchSortBy: (sort: "priority" | "newest" | "release" | "title") => void;
+  watchedSortBy?: "newest" | "rating" | "priority" | "release" | "title";
+  onChangeWatchedSortBy?: (sort: "newest" | "rating" | "priority" | "release" | "title") => void;
   watchedCategory?: WatchedCategory;
   onSelectWatchedCategory?: (category: WatchedCategory) => void;
   watchedCounts?: {
@@ -64,6 +66,8 @@ export function FilterDrawer({
   priorityCounts,
   toWatchSortBy,
   onChangeToWatchSortBy,
+  watchedSortBy = "newest",
+  onChangeWatchedSortBy,
   watchedCategory = "all",
   onSelectWatchedCategory,
   watchedCounts = { all: 0, movies: 0, series: 0, anime: 0 },
@@ -230,7 +234,6 @@ export function FilterDrawer({
                             : "bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 border border-zinc-800/50"
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dotBg}`} />
                         <span>{cfg.shortLabel}</span>
                         <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                           isSelected ? "bg-zinc-950/30 text-current" : "bg-zinc-800 text-zinc-400"
@@ -438,8 +441,8 @@ export function FilterDrawer({
             </div>
           )}
 
-          {/* Sort Selection */}
-          {tab === "towatch" && (
+          {/* Sort Selection (Available for both To-Watch and Watched tabs) */}
+          {(tab === "towatch" || tab === "watched") && (
             <div id="drawer-sort-group" className="space-y-2">
               <button
                 type="button"
@@ -448,9 +451,25 @@ export function FilterDrawer({
                 className="w-full flex items-center justify-between text-[11px] font-semibold tracking-wider text-zinc-400 uppercase hover:text-zinc-200 transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-1.5">
-                  <span>Sort By</span>
+                  <span>SORT BY</span>
                   <span className="text-[10px] lowercase text-zinc-500 font-normal">
-                    {toWatchSortBy}
+                    {tab === "towatch"
+                      ? toWatchSortBy === "priority"
+                        ? "priority"
+                        : toWatchSortBy === "newest"
+                        ? "recently added"
+                        : toWatchSortBy === "release"
+                        ? "release year"
+                        : "title"
+                      : watchedSortBy === "priority"
+                      ? "priority"
+                      : watchedSortBy === "rating"
+                      ? "rating"
+                      : watchedSortBy === "newest"
+                      ? "recently watched"
+                      : watchedSortBy === "release"
+                      ? "release year"
+                      : "title"}
                   </span>
                 </div>
                 <div className="text-zinc-500 group-hover:text-zinc-300 transition-transform">
@@ -460,29 +479,54 @@ export function FilterDrawer({
 
               {isSortOpen && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 animate-in fade-in duration-150">
-                  {[
-                    { id: "priority", label: "Priority (High → Low)" },
-                    { id: "newest", label: "Recently Added" },
-                    { id: "release", label: "Release Year" },
-                    { id: "title", label: "Title (A - Z)" },
-                  ].map((s) => {
-                    const active = toWatchSortBy === s.id;
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        id={`drawer-sort-${s.id}`}
-                        onClick={() => onChangeToWatchSortBy(s.id as any)}
-                        className={`px-3 py-2 rounded-xl text-xs font-medium transition-all text-center cursor-pointer ${
-                          active
-                            ? "bg-zinc-100 text-zinc-950 font-bold shadow-xs"
-                            : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/50"
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    );
-                  })}
+                  {tab === "towatch"
+                    ? [
+                        { id: "priority", label: "Priority (High → Low)" },
+                        { id: "newest", label: "Recently Added" },
+                        { id: "release", label: "Release Year" },
+                        { id: "title", label: "Title (A - Z)" },
+                      ].map((s) => {
+                        const active = toWatchSortBy === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            id={`drawer-sort-${s.id}`}
+                            onClick={() => onChangeToWatchSortBy(s.id as any)}
+                            className={`px-3 py-2 rounded-xl text-xs font-medium transition-all text-center cursor-pointer ${
+                              active
+                                ? "bg-zinc-100 text-zinc-950 font-bold shadow-xs"
+                                : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/50"
+                            }`}
+                          >
+                            {s.label}
+                          </button>
+                        );
+                      })
+                    : [
+                        { id: "priority", label: "Priority (High → Low)" },
+                        { id: "newest", label: "Recently Added" },
+                        { id: "rating", label: "Rating (High → Low)" },
+                        { id: "release", label: "Release Year" },
+                        { id: "title", label: "Title (A - Z)" },
+                      ].map((s) => {
+                        const active = watchedSortBy === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            id={`drawer-watched-sort-${s.id}`}
+                            onClick={() => onChangeWatchedSortBy && onChangeWatchedSortBy(s.id as any)}
+                            className={`px-3 py-2 rounded-xl text-xs font-medium transition-all text-center cursor-pointer ${
+                              active
+                                ? "bg-zinc-100 text-zinc-950 font-bold shadow-xs"
+                                : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/50"
+                            }`}
+                          >
+                            {s.label}
+                          </button>
+                        );
+                      })}
                 </div>
               )}
             </div>

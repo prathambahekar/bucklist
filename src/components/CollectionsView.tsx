@@ -3,7 +3,6 @@ import {
   Layers,
   Sparkles,
   Plus,
-  Search,
   CheckCircle2,
   Star,
   Clock,
@@ -52,7 +51,6 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
   onMarkWatched,
 }) => {
   const [filterTab, setFilterTab] = useState<"all" | "franchises" | "custom" | "completed">("all");
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
 
   // Create / Edit Custom Collection Modal state
@@ -107,17 +105,9 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
       if (filterTab === "franchises" && col.type !== "franchise") return false;
       if (filterTab === "custom" && col.type !== "custom") return false;
       if (filterTab === "completed" && !isCompleted) return false;
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchName = col.name.toLowerCase().includes(q);
-        const matchDesc = col.description?.toLowerCase().includes(q);
-        const matchMovies = col.movies.some((m) => m.title.toLowerCase().includes(q));
-        return matchName || matchDesc || matchMovies;
-      }
       return true;
     });
-  }, [computedCollections, filterTab, searchQuery]);
+  }, [computedCollections, filterTab]);
 
   // Selected collection object
   const activeCollection = useMemo(() => {
@@ -217,39 +207,38 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
   return (
     <div
       id="collections-view-container"
-      className="w-full space-y-4 sm:space-y-5 pb-36 sm:pb-28 animate-in fade-in duration-200"
+      className="w-full space-y-4 pb-36 sm:pb-28 animate-in fade-in duration-200"
     >
-      {/* Top Header & Overview Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+      {/* Header Bar: Title on Left, + New Button on Right */}
+      <div className="flex items-center justify-between gap-3 pt-1">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight flex items-center gap-2">
               <span>Collections</span>
             </h2>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/60">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-800/90 text-zinc-400 border border-zinc-700/60">
               {computedCollections.length}
             </span>
           </div>
-          <p className="text-xs text-zinc-400 mt-0.5">
+          <p className="text-xs text-zinc-400 mt-0.5 hidden xs:block">
             Sagas, movie universes, and custom curated lists
           </p>
         </div>
 
-        {/* Action Button */}
+        {/* Action Button: + New on right */}
         <button
           type="button"
           id="create-collection-btn"
           onClick={handleOpenCreateModal}
-          className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 active:scale-95 text-zinc-950 font-bold text-xs transition-all shadow-xs cursor-pointer shrink-0 self-start sm:self-auto"
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-amber-400 hover:bg-amber-300 active:scale-95 text-zinc-950 font-bold text-xs transition-all shadow-xs cursor-pointer shrink-0"
         >
-          <Plus className="w-4 h-4" />
-          <span>New Collection</span>
+          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>New</span>
         </button>
       </div>
 
-      {/* Filter Tabs & Search Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        {/* Segmented Filter Pills */}
+      {/* Minimal Filter Tabs Row */}
+      <div className="flex items-center justify-between gap-2">
         <div
           id="collection-type-tabs"
           className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1"
@@ -340,27 +329,12 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
           )}
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:max-w-xs shrink-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
-          <input
-            type="text"
-            id="collections-search-input"
-            placeholder="Search collections or titles..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8.5 pr-8 py-1.5 text-xs bg-zinc-900/90 border border-zinc-800/90 rounded-xl text-zinc-100 placeholder:text-zinc-500 focus:outline-hidden focus:border-amber-500/50 transition-colors"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-0.5"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+        {overallStats.totalFranchiseTitles > 0 && (
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-xl bg-zinc-900/60 border border-zinc-800/60 text-xs text-zinc-400">
+            <span>Progress:</span>
+            <span className="font-bold text-amber-400">{overallStats.percent}%</span>
+          </div>
+        )}
       </div>
 
       {/* Collections Grid */}
@@ -369,8 +343,10 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
           <Layers className="w-10 h-10 mx-auto text-zinc-600 mb-2.5" />
           <h3 className="text-sm font-semibold text-zinc-200">No collections found</h3>
           <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
-            {searchQuery
-              ? `No collections match "${searchQuery}"`
+            {filterTab === "custom"
+              ? "You haven't created any custom collections yet."
+              : filterTab === "completed"
+              ? "No collections fully watched yet. Keep watching to complete a saga!"
               : "Add famous movies (like Harry Potter, Dark Knight, Avengers) to unlock smart sagas, or create your own custom lists."}
           </p>
           <button

@@ -160,15 +160,7 @@ export function BatchManagementBar({
                           }}
                           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-colors text-left hover:bg-zinc-850 cursor-pointer ${cfg.badgeText} border border-transparent hover:border-zinc-800`}
                         >
-                          <div className="flex items-center gap-2.5">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dotBg}`} />
-                            <div>
-                              <div className="font-bold leading-tight text-zinc-200">{cfg.label}</div>
-                              <div className="text-[10px] text-zinc-400 font-normal">
-                                {cfg.description.split("•")[0]}
-                              </div>
-                            </div>
-                          </div>
+                          <span className="font-bold leading-tight text-zinc-200">{cfg.label}</span>
                         </button>
                       );
                     })}

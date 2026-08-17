@@ -75,7 +75,7 @@ export function PriorityBadge({
     return (
       <span
         className={`inline-flex items-center font-medium border shadow-2xs ${currentConfig.badgeBg} ${currentConfig.badgeBorder} ${currentConfig.badgeText} ${sizeClasses[size]} ${className}`}
-        title={`Priority: ${currentConfig.label} (${currentConfig.description})`}
+        title={`Priority: ${currentConfig.label}`}
       >
         {badgeContent}
       </span>
@@ -125,15 +125,7 @@ export function PriorityBadge({
                       : "text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dotBg}`} />
-                    <div className="flex flex-col">
-                      <span className="leading-tight font-semibold">{cfg.label}</span>
-                      <span className="text-[9px] text-zinc-500 line-clamp-1 font-normal">
-                        {cfg.description.split("•")[0]}
-                      </span>
-                    </div>
-                  </div>
+                  <span className="leading-tight font-semibold">{cfg.label}</span>
                   {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
                 </button>
               );

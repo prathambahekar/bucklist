@@ -55,6 +55,8 @@ import {
   TvProgressMap,
   getLocalBlendEnabled,
   saveLocalBlendEnabled,
+  getLocalCollectionsEnabled,
+  saveLocalCollectionsEnabled,
 } from "./lib/storage";
 import {
   getLocalCollections,
@@ -78,6 +80,7 @@ import { WatchedTimelineView } from "./components/WatchedTimelineView";
 import { CollectionsView } from "./components/CollectionsView";
 import { AddToCollectionModal } from "./components/AddToCollectionModal";
 import { SearchAddDrawer } from "./components/SearchAddDrawer";
+import { UniversalSearchDrawer } from "./components/UniversalSearchDrawer";
 import { SetPriorityModal } from "./components/SetPriorityModal";
 import { NotificationPopover } from "./components/NotificationPopover";
 import { SwipeableMovieCard } from "./components/SwipeableMovieCard";
@@ -121,6 +124,7 @@ export default function App() {
 
   // Search & Add Drawer state
   const [isSearchDrawerOpen, setIsSearchDrawerOpen] = useState(false);
+  const [isUniversalSearchOpen, setIsUniversalSearchOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
 
@@ -142,6 +146,7 @@ export default function App() {
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [selectedPriorityFilter, setSelectedPriorityFilter] = useState<PriorityLevel | "all">("all");
   const [toWatchSortBy, setToWatchSortBy] = useState<"priority" | "newest" | "release" | "title">("priority");
+  const [watchedSortBy, setWatchedSortBy] = useState<"newest" | "rating" | "priority" | "release" | "title">("newest");
   const [sortBy] = useState<"newest" | "rating" | "release">("newest");
   const [toWatchViewMode, setToWatchViewMode] = useState<ToWatchViewMode>(() =>
     getLocalToWatchViewMode()
@@ -161,6 +166,25 @@ export default function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Global keyboard shortcut for universal search (Cmd+K / Ctrl+K / slash)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsUniversalSearchOpen((prev) => !prev);
+      } else if (
+        e.key === "/" &&
+        !["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName) &&
+        !(e.target as HTMLElement)?.isContentEditable
+      ) {
+        e.preventDefault();
+        setIsUniversalSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>(() =>
     getLocalTimelinePeriod()
   );
@@ -174,6 +198,7 @@ export default function App() {
   );
   const [addToCollectionMovie, setAddToCollectionMovie] = useState<WatchlistMovie | null>(null);
   const [blendEnabled, setBlendEnabled] = useState<boolean>(() => getLocalBlendEnabled());
+  const [collectionsEnabled, setCollectionsEnabled] = useState<boolean>(() => getLocalCollectionsEnabled());
 
   // Priority modal state when adding to watchlist
   const [priorityModalMovie, setPriorityModalMovie] = useState<SearchResult | WatchlistMovie | null>(null);
@@ -232,6 +257,14 @@ export default function App() {
     setWatchedViewMode(mode);
     saveLocalWatchedViewMode(mode);
   }, []);
+
+  const handleToggleCollections = useCallback((enabled: boolean) => {
+    setCollectionsEnabled(enabled);
+    saveLocalCollectionsEnabled(enabled);
+    if (!enabled && watchedViewMode === "collections") {
+      handleSetWatchedViewMode("timeline");
+    }
+  }, [watchedViewMode, handleSetWatchedViewMode]);
 
   const handleSetTimelinePeriod = useCallback((period: TimelinePeriod) => {
     setTimelinePeriod(period);
@@ -1062,12 +1095,31 @@ export default function App() {
           return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
         }
 
-        if (sortBy === "rating") return (b.rating || 0) - (a.rating || 0);
-        if (sortBy === "release") return (b.release_year || "").localeCompare(a.release_year || "");
-        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        if (watchedSortBy === "rating") {
+          const ratingA = a.rating ?? -1;
+          const ratingB = b.rating ?? -1;
+          if (ratingB !== ratingA) return ratingB - ratingA;
+          const dateA = a.watched_date ? new Date(a.watched_date).getTime() : new Date(a.created_at || 0).getTime();
+          const dateB = b.watched_date ? new Date(b.watched_date).getTime() : new Date(b.created_at || 0).getTime();
+          return dateB - dateA;
+        }
+        if (watchedSortBy === "priority") {
+          const rankA = PRIORITY_RANK[normalizePriority(a.priority)] || 2;
+          const rankB = PRIORITY_RANK[normalizePriority(b.priority)] || 2;
+          if (rankB !== rankA) return rankB - rankA;
+          const dateA = a.watched_date ? new Date(a.watched_date).getTime() : new Date(a.created_at || 0).getTime();
+          const dateB = b.watched_date ? new Date(b.watched_date).getTime() : new Date(b.created_at || 0).getTime();
+          return dateB - dateA;
+        }
+        if (watchedSortBy === "release") return (b.release_year || "").localeCompare(a.release_year || "");
+        if (watchedSortBy === "title") return (a.title || "").localeCompare(b.title || "");
+
+        const dateA = a.watched_date ? new Date(a.watched_date).getTime() : new Date(a.created_at || 0).getTime();
+        const dateB = b.watched_date ? new Date(b.watched_date).getTime() : new Date(b.created_at || 0).getTime();
+        return dateB - dateA;
       });
     },
-    [selectedGenre, selectedPlatform, selectedPriorityFilter, toWatchSortBy, sortBy]
+    [selectedGenre, selectedPlatform, selectedPriorityFilter, toWatchSortBy, watchedSortBy]
   );
 
   const displayMovies = useMemo(() => processList(movies, true), [movies, processList]);
@@ -1877,6 +1929,19 @@ export default function App() {
 
           {/* Top Actions */}
           <div id="header-actions" className="flex items-center gap-1.5 sm:gap-2">
+            {/* Universal Search Button */}
+            <button
+              id="open-universal-search-btn"
+              type="button"
+              onClick={() => setIsUniversalSearchOpen(true)}
+              className="flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-xl text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800/90 hover:border-zinc-700 active:scale-95 transition-all duration-150 cursor-pointer shadow-xs group"
+              title="Universal Search"
+              aria-label="Universal Search"
+            >
+              <Search className="w-4 h-4 shrink-0 text-amber-400 group-hover:text-amber-300 transition-colors" />
+              <span className="hidden sm:inline font-medium">Search</span>
+            </button>
+
             <button
               id="open-settings-page-btn"
               type="button"
@@ -1911,6 +1976,8 @@ export default function App() {
             onToggleBlend={(enabled) => {
               setBlendEnabled(enabled);
             }}
+            collectionsEnabled={collectionsEnabled}
+            onToggleCollections={handleToggleCollections}
             onDataUpdated={() => {
               fetchAll();
               setTvProgressMap(getLocalTvProgress());
@@ -2074,7 +2141,7 @@ export default function App() {
                   </button>
                 )}
 
-                {tab === "watched" && (
+                {tab === "watched" && collectionsEnabled && (
                   <button
                     type="button"
                     id="view-opt-collections"
@@ -2102,14 +2169,13 @@ export default function App() {
                 <span className="text-[11px] text-zinc-500 font-medium">Active Filters:</span>
                 {tab === "towatch" && selectedPriorityFilter !== "all" && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                    <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIGS[selectedPriorityFilter].dotBg}`} />
                     <span>{PRIORITY_CONFIGS[selectedPriorityFilter].shortLabel}</span>
                     <button
                       type="button"
                       onClick={() => setSelectedPriorityFilter("all")}
                       className="hover:text-white ml-0.5 cursor-pointer"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </span>
                 )}
@@ -2121,7 +2187,7 @@ export default function App() {
                       onClick={() => handleSetWatchedCategory("all")}
                       className="hover:text-white ml-0.5 cursor-pointer"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </span>
                 )}
@@ -2133,7 +2199,7 @@ export default function App() {
                       onClick={() => setSelectedPlatform(null)}
                       className="hover:text-white ml-0.5 cursor-pointer"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </span>
                 )}
@@ -2145,7 +2211,7 @@ export default function App() {
                       onClick={() => setSelectedGenre(null)}
                       className="hover:text-white ml-0.5 cursor-pointer"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </span>
                 )}
@@ -2170,7 +2236,7 @@ export default function App() {
             <Loader2 className="w-8 h-8 animate-spin" />
             <p className="text-sm text-zinc-400">Loading your watchlist...</p>
           </div>
-        ) : tab === "watched" && watchedViewMode === "collections" ? (
+        ) : tab === "watched" && collectionsEnabled && watchedViewMode === "collections" ? (
           <CollectionsView
             watchlist={[...movies, ...watched]}
             customCollections={customCollections}
@@ -2268,7 +2334,6 @@ export default function App() {
                   {/* Priority Section Header - Clean, borderless minimalist aesthetic */}
                   <div className="flex items-center justify-between pb-1 pt-1">
                     <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${group.config.dotBg}`} />
                       <h3 className="text-xs sm:text-sm font-bold text-zinc-200 uppercase tracking-wider">
                         {group.config.label}
                       </h3>
@@ -2276,9 +2341,6 @@ export default function App() {
                         {group.items.length}
                       </span>
                     </div>
-                    <span className="text-[11px] text-zinc-500 hidden sm:inline">
-                      {group.config.description}
-                    </span>
                   </div>
 
                   {/* Items Grid */}
@@ -2836,6 +2898,8 @@ export default function App() {
         priorityCounts={priorityCounts}
         toWatchSortBy={toWatchSortBy}
         onChangeToWatchSortBy={(sort) => setToWatchSortBy(sort)}
+        watchedSortBy={watchedSortBy}
+        onChangeWatchedSortBy={(sort) => setWatchedSortBy(sort)}
         watchedCategory={watchedCategory}
         onSelectWatchedCategory={handleSetWatchedCategory}
         watchedCounts={watchedCounts}
@@ -2903,6 +2967,21 @@ export default function App() {
         onSelectMovie={(item) => {
           setDetailMovie(item);
         }}
+      />
+
+      {/* Dedicated Universal Search Drawer / Spotlight */}
+      <UniversalSearchDrawer
+        isOpen={isUniversalSearchOpen}
+        onClose={() => setIsUniversalSearchOpen(false)}
+        movies={movies}
+        watched={watched}
+        existingWatchlistIds={existingWatchlistIds}
+        existingWatchedIds={existingWatchedIds}
+        onSelectMovie={(item) => {
+          setDetailMovie(item);
+        }}
+        onToggleWatchlist={handleAddToWatchlist}
+        onToggleWatched={handleAddToWatched}
       />
 
       {/* Rate & Mark Watched Modal / Bottom Sheet - Highest Priority (z-[100]) Above All Drawers */}

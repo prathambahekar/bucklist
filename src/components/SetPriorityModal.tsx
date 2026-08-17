@@ -144,16 +144,8 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
                   </div>
 
                   <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs sm:text-sm font-bold leading-tight ${cfg.badgeText}`}>
-                        {cfg.label}
-                      </span>
-                      <span className="text-[10px] text-zinc-500 hidden sm:inline">
-                        [{idx + 1}]
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-zinc-400 leading-tight mt-0.5 truncate">
-                      {cfg.description}
+                    <span className={`text-xs sm:text-sm font-bold leading-tight ${cfg.badgeText}`}>
+                      {cfg.label}
                     </span>
                   </div>
                 </div>

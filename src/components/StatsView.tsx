@@ -31,7 +31,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
   tvProgressMap,
   onNavigateToWatchlist,
 }) => {
-  const [timeFilter, setTimeFilter] = useState<"all" | "year" | "month" | "week">("all");
+  const [timeFilter, setTimeFilter] = useState<"all" | "year" | "month" | "week">("week");
   const [chartsExpanded, setChartsExpanded] = useState<boolean>(false);
   const [hoveredDonutIdx, setHoveredDonutIdx] = useState<number | null>(null);
 

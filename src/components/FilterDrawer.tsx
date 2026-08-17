@@ -17,14 +17,13 @@ import {
   PRIORITY_ORDER,
   WatchedCategory,
   TimelinePeriod,
-  TabType,
 } from "../types";
 import { getPlatformAccentTheme } from "./OttBadge";
 
 interface FilterDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  tab: TabType;
+  tab: "towatch" | "watched" | "blend" | "settings";
   selectedPriorityFilter: PriorityLevel | "all";
   onSelectPriority: (priority: PriorityLevel | "all") => void;
   priorityCounts: {

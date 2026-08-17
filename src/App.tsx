@@ -76,7 +76,6 @@ import { OttBadge, getPlatformAccentTheme } from "./components/OttBadge";
 import { DatePickerPopover } from "./components/DatePickerPopover";
 import { WatchVenuePopover, WatchVenueType } from "./components/WatchVenuePopover";
 import { SettingsView } from "./components/SettingsView";
-import { ProfileView } from "./components/ProfileView";
 import { WatchedTimelineView } from "./components/WatchedTimelineView";
 import { CollectionsView } from "./components/CollectionsView";
 import { AddToCollectionModal } from "./components/AddToCollectionModal";
@@ -1913,33 +1912,20 @@ export default function App() {
       <div className="w-full max-w-6xl xl:max-w-7xl px-3.5 py-4 sm:px-6 lg:px-8 overflow-x-hidden">
         {/* Header Bar */}
         <header id="app-header" className="flex items-center justify-between py-2 sm:py-3 mb-2 sm:mb-3">
-          <button
-            id="open-profile-page-btn"
-            type="button"
-            onClick={() => setTab(tab === "profile" ? "towatch" : "profile")}
-            className="flex items-center gap-3 select-none text-left cursor-pointer group active:scale-[0.98] transition-transform"
-            title="Open Profile & Account Status"
-          >
-            <div
-              id="logo-badge"
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center shadow-lg transition-all ${
-                tab === "profile"
-                  ? "bg-amber-400 text-zinc-950 shadow-amber-500/30 ring-2 ring-amber-300 scale-105"
-                  : "bg-gradient-to-br from-amber-400 to-amber-500 text-zinc-950 shadow-amber-500/20 ring-1 ring-amber-400/40 group-hover:scale-105"
-              }`}
-            >
+          <div className="flex items-center gap-3 select-none">
+            <div id="logo-badge" className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-zinc-950 shadow-lg shadow-amber-500/20 ring-1 ring-amber-400/40">
               <Bookmark className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
             </div>
             <div>
               <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-zinc-100 flex items-center gap-2">
-                <span className="group-hover:text-amber-400 transition-colors">Bucklist</span>
+                <span>Bucklist</span>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/90 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded-md hidden sm:inline-block">
                   Cinema
                 </span>
               </h1>
               <p className="text-[11px] text-zinc-500 hidden sm:block font-medium">Personal Movie & Series Tracker</p>
             </div>
-          </button>
+          </div>
 
           {/* Top Actions */}
           <div id="header-actions" className="flex items-center gap-1.5 sm:gap-2">
@@ -1981,17 +1967,7 @@ export default function App() {
           </div>
         </header>
 
-        {tab === "profile" ? (
-          <ProfileView
-            movies={movies}
-            watched={watched}
-            onRestoreUserData={(data) => {
-              if (data.watchlist) setMovies(data.watchlist);
-              if (data.watched) setWatched(data.watched);
-            }}
-            onNavigateToWatchlist={() => setTab("towatch")}
-          />
-        ) : tab === "settings" ? (
+        {tab === "settings" ? (
           <SettingsView
             watched={watched}
             movies={movies}

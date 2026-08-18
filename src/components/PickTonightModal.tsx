@@ -11,12 +11,7 @@ import {
 } from "lucide-react";
 import type { Blend, BlendMovie, WatchlistMovie } from "../types";
 import { pickTonightMovie } from "../lib/blend";
-import {
-  getPosterUrl,
-  getBackdropUrl,
-  handleImageError,
-  DEFAULT_POSTER_FALLBACK,
-} from "../lib/api";
+import { getPosterUrl, getBackdropUrl } from "../lib/api";
 import { OttBadge } from "./OttBadge";
 
 interface PickTonightModalProps {
@@ -80,16 +75,8 @@ export function PickTonightModal({
 
   if (!isOpen) return null;
 
-  const posterUrl = selectedMovie
-    ? selectedMovie.poster_path?.startsWith("http")
-      ? selectedMovie.poster_path
-      : getPosterUrl(selectedMovie.poster_path)
-    : null;
-  const backdropUrl = selectedMovie
-    ? selectedMovie.backdrop_path?.startsWith("http")
-      ? selectedMovie.backdrop_path
-      : getBackdropUrl(selectedMovie.backdrop_path)
-    : null;
+  const posterUrl = selectedMovie ? getPosterUrl(selectedMovie.poster_path) : null;
+  const backdropUrl = selectedMovie ? getBackdropUrl(selectedMovie.backdrop_path) : null;
 
   return (
     <div
@@ -182,7 +169,6 @@ export function PickTonightModal({
                   alt={selectedMovie.title}
                   className="w-full h-full object-cover brightness-60"
                   referrerPolicy="no-referrer"
-                  onError={(e) => handleImageError(e, DEFAULT_POSTER_FALLBACK)}
                 />
               ) : posterUrl ? (
                 <img
@@ -190,7 +176,6 @@ export function PickTonightModal({
                   alt={selectedMovie.title}
                   className="w-full h-full object-cover blur-sm brightness-40"
                   referrerPolicy="no-referrer"
-                  onError={(e) => handleImageError(e, DEFAULT_POSTER_FALLBACK)}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-zinc-700">
@@ -209,9 +194,6 @@ export function PickTonightModal({
                       alt={selectedMovie.title}
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
-                      onError={(e) =>
-                        handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                      }
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-600">

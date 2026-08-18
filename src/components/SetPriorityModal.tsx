@@ -1,8 +1,8 @@
 import React, { useEffect } from "react";
-import { X, Flame, Star, Film, Coffee, Check, BookmarkPlus, Gamepad2 } from "lucide-react";
-import type { PriorityLevel, SearchResult, WatchlistMovie, AppMode } from "../types";
-import { PRIORITY_ORDER, getPriorityConfig } from "../types";
-import { getPosterUrl, handleImageError, DEFAULT_POSTER_FALLBACK, DEFAULT_GAME_POSTER_FALLBACK } from "../lib/api";
+import { X, Flame, Star, Film, Coffee, Check, BookmarkPlus } from "lucide-react";
+import type { PriorityLevel, SearchResult, WatchlistMovie } from "../types";
+import { PRIORITY_ORDER, PRIORITY_CONFIGS, getPriorityConfig } from "../types";
+import { getPosterUrl } from "../lib/api";
 
 interface SetPriorityModalProps {
   movie: SearchResult | WatchlistMovie | null;
@@ -10,8 +10,14 @@ interface SetPriorityModalProps {
   onClose: () => void;
   onSelectPriority: (priority: PriorityLevel, movie: SearchResult | WatchlistMovie) => void;
   initialPriority?: PriorityLevel;
-  appMode?: AppMode;
 }
+
+const PRIORITY_ICONS: Record<PriorityLevel, React.ReactNode> = {
+  must_watch: <Flame className="w-4 h-4 text-rose-400" />,
+  very_interested: <Star className="w-4 h-4 text-amber-400 fill-amber-400/30" />,
+  wanna_see: <Film className="w-4 h-4 text-zinc-300" />,
+  maybe_later: <Coffee className="w-4 h-4 text-sky-400" />,
+};
 
 export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
   movie,
@@ -19,7 +25,6 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
   onClose,
   onSelectPriority,
   initialPriority = "wanna_see",
-  appMode = "cinema",
 }) => {
   useEffect(() => {
     if (!isOpen) return;
@@ -41,28 +46,7 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
 
   if (!isOpen || !movie) return null;
 
-  const isGames = appMode === "games";
-  const fallbackImg = isGames ? DEFAULT_GAME_POSTER_FALLBACK : DEFAULT_POSTER_FALLBACK;
-  const poster = getPosterUrl(movie.poster_path) || fallbackImg;
-
-  const getPriorityIcon = (lvl: PriorityLevel) => {
-    switch (lvl) {
-      case "must_watch":
-        return <Flame className="w-4 h-4 text-rose-400" />;
-      case "very_interested":
-        return <Star className="w-4 h-4 text-amber-400 fill-amber-400/30" />;
-      case "wanna_see":
-        return isGames ? (
-          <Gamepad2 className="w-4 h-4 text-zinc-300" />
-        ) : (
-          <Film className="w-4 h-4 text-zinc-300" />
-        );
-      case "maybe_later":
-        return <Coffee className="w-4 h-4 text-sky-400" />;
-      default:
-        return <Star className="w-4 h-4 text-zinc-300" />;
-    }
-  };
+  const poster = getPosterUrl(movie.poster_path);
 
   return (
     <div
@@ -85,9 +69,7 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
               <BookmarkPlus className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-zinc-100">
-                {isGames ? "Add to Play-list" : "Add to Watchlist"}
-              </h3>
+              <h3 className="text-base font-bold text-zinc-100">Add to Watchlist</h3>
               <p className="text-xs text-zinc-400">Select priority for this title</p>
             </div>
           </div>
@@ -103,13 +85,18 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
         {/* Movie Info Card */}
         <div className="flex items-center gap-3 p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 mb-4">
           <div className="w-11 h-15 rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800">
-            <img
-              src={poster}
-              alt={movie.title}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-              onError={(e) => handleImageError(e, fallbackImg)}
-            />
+            {poster ? (
+              <img
+                src={poster}
+                alt={movie.title}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-zinc-700">
+                <Film className="w-5 h-5" />
+              </div>
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-bold text-zinc-100 truncate">{movie.title}</h4>
@@ -130,7 +117,7 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
         {/* Priority Options List */}
         <div className="space-y-2 mb-2">
           {PRIORITY_ORDER.map((lvl, idx) => {
-            const cfg = getPriorityConfig(lvl, appMode);
+            const cfg = PRIORITY_CONFIGS[lvl];
             const isSelected = initialPriority === lvl;
 
             return (
@@ -153,15 +140,12 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
                         : "bg-zinc-950 border-zinc-800 group-hover:border-zinc-700"
                     }`}
                   >
-                    {getPriorityIcon(lvl)}
+                    {PRIORITY_ICONS[lvl]}
                   </div>
 
                   <div className="flex flex-col min-w-0">
                     <span className={`text-xs sm:text-sm font-bold leading-tight ${cfg.badgeText}`}>
                       {cfg.label}
-                    </span>
-                    <span className="text-[11px] text-zinc-500 mt-0.5">
-                      {cfg.description}
                     </span>
                   </div>
                 </div>

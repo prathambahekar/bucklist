@@ -3,65 +3,15 @@ import {
   type BucklistBackupData,
   type ImportValidationResult,
   type MovieCollection,
-  type AppMode,
   normalizePriority,
 } from "../types";
-export type { AppMode };
 import { normalizePlatformsList } from "./api";
 import { Capacitor } from "@capacitor/core";
 import { Share } from "@capacitor/share";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 
 const LOCAL_STORAGE_KEY = "bucklist_local_watchlist_v1";
-const LOCAL_GAMES_STORAGE_KEY = "bucklist_local_games_v1";
-const APP_MODE_STORAGE_KEY = "bucklist_app_mode_v1";
 const TV_PROGRESS_KEY = "bucklist_tv_progress_v1";
-
-// App Mode State ("cinema" | "games")
-export function getLocalAppMode(): AppMode {
-  try {
-    const raw = localStorage.getItem(APP_MODE_STORAGE_KEY);
-    if (raw === "games" || raw === "cinema") return raw;
-  } catch {
-    // ignore
-  }
-  return "cinema";
-}
-
-export function saveLocalAppMode(mode: AppMode): void {
-  try {
-    localStorage.setItem(APP_MODE_STORAGE_KEY, mode);
-  } catch {
-    // ignore
-  }
-}
-
-// Initial sample games for new users
-export function getLocalGameWatchlist(): WatchlistMovie[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_GAMES_STORAGE_KEY);
-    if (!raw) return [];
-    const list: WatchlistMovie[] = JSON.parse(raw);
-    if (!Array.isArray(list)) return [];
-    // Filter out seed items if any exist from previous runs
-    const userItems = list.filter((m) => !m.id.startsWith("game-seed-"));
-    return userItems.map((m) => ({
-      ...m,
-      priority: normalizePriority(m.priority),
-      platforms: m.platforms || [],
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export function saveLocalGameWatchlist(items: WatchlistMovie[]): void {
-  try {
-    localStorage.setItem(LOCAL_GAMES_STORAGE_KEY, JSON.stringify(items));
-  } catch {
-    // ignore
-  }
-}
 
 export interface TvProgressMap {
   [tmdbId: number]: {
@@ -293,12 +243,10 @@ export function saveLocalTimelinePeriod(period: TimelinePeriod): void {
 
 export function createBackupPayload(): BucklistBackupData {
   const watchlist = getLocalWatchlist();
-  const gameWatchlist = getLocalGameWatchlist();
   const tvProgress = getLocalTvProgress();
   const toWatchViewMode = getLocalToWatchViewMode();
   const watchedViewMode = getLocalWatchedViewMode();
   const watchedCategory = getLocalWatchedCategory();
-  const appMode = getLocalAppMode();
 
   let collections: MovieCollection[] = [];
   try {
@@ -317,17 +265,15 @@ export function createBackupPayload(): BucklistBackupData {
     appName: "Bucklist",
     exportedAt: new Date().toISOString(),
     watchlist,
-    gameWatchlist,
     collections,
     tvProgress,
     preferences: {
       toWatchViewMode,
       watchedViewMode,
       watchedCategory,
-      appMode,
     },
     stats: {
-      totalItems: watchlist.length + gameWatchlist.length,
+      totalItems: watchlist.length,
       toWatchCount,
       watchedCount,
       tvTrackedCount,
@@ -519,7 +465,7 @@ export function downloadBackupFile(customName?: string): boolean {
   return true;
 }
 
-export function sanitizeMovieItem(item: any): WatchlistMovie | null {
+function sanitizeMovieItem(item: any): WatchlistMovie | null {
   if (!item || typeof item !== "object") return null;
 
   // TMDB id must exist and be numeric
@@ -531,9 +477,7 @@ export function sanitizeMovieItem(item: any): WatchlistMovie | null {
   const id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : `movie-${tmdbIdNum}-${Date.now()}`;
   const posterPath = typeof item.poster_path === "string" ? item.poster_path : null;
   const releaseYear = item.release_year ? String(item.release_year) : null;
-  const mediaType = item.media_type === "tv" || item.media_type === "movie" || item.media_type === "game" ? item.media_type : undefined;
-  const metacritic = typeof item.metacritic === "number" ? item.metacritic : undefined;
-  const playtime = typeof item.playtime === "number" ? item.playtime : undefined;
+  const mediaType = item.media_type === "tv" || item.media_type === "movie" ? item.media_type : undefined;
 
   const genres = Array.isArray(item.genres)
     ? item.genres.filter((g: any) => typeof g === "string")
@@ -559,8 +503,6 @@ export function sanitizeMovieItem(item: any): WatchlistMovie | null {
     poster_path: posterPath,
     release_year: releaseYear,
     media_type: mediaType,
-    metacritic,
-    playtime,
     genres,
     platforms,
     priority,

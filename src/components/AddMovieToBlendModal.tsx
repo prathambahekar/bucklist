@@ -10,12 +10,7 @@ import {
   Star,
 } from "lucide-react";
 import type { Blend, WatchlistMovie, SearchResult } from "../types";
-import {
-  searchMovies,
-  getPosterUrl,
-  handleImageError,
-  DEFAULT_POSTER_FALLBACK,
-} from "../lib/api";
+import { searchMovies, getPosterUrl } from "../lib/api";
 import { OttBadge } from "./OttBadge";
 
 interface AddMovieToBlendModalProps {
@@ -190,9 +185,6 @@ export function AddMovieToBlendModal({
                                 alt={item.title}
                                 className="w-full h-full object-cover"
                                 referrerPolicy="no-referrer"
-                                onError={(e) =>
-                                  handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                                }
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-700">
@@ -276,9 +268,6 @@ export function AddMovieToBlendModal({
                                 alt={item.title}
                                 className="w-full h-full object-cover"
                                 referrerPolicy="no-referrer"
-                                onError={(e) =>
-                                  handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                                }
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-700">

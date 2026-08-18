@@ -8,11 +8,7 @@ import {
   Film,
 } from "lucide-react";
 import type { Blend, BlendMovie } from "../types";
-import {
-  getPosterUrl,
-  handleImageError,
-  DEFAULT_POSTER_FALLBACK,
-} from "../lib/api";
+import { getPosterUrl } from "../lib/api";
 
 interface WatchedTogetherModalProps {
   isOpen: boolean;
@@ -129,7 +125,6 @@ export function WatchedTogetherModal({
                 alt={movie.title}
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
-                onError={(e) => handleImageError(e, DEFAULT_POSTER_FALLBACK)}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-zinc-600">

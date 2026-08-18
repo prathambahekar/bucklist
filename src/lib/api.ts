@@ -448,66 +448,18 @@ export const POSTER_BASE = "https://image.tmdb.org/t/p/w342";
 export const BACKDROP_BASE = "https://image.tmdb.org/t/p/w780";
 export const STILL_BASE = "https://image.tmdb.org/t/p/w300";
 
-export const DEFAULT_POSTER_FALLBACK =
-  "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&auto=format&fit=crop&q=60";
-export const DEFAULT_GAME_POSTER_FALLBACK =
-  "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=60";
-
-export function handleImageError(
-  e: React.SyntheticEvent<HTMLImageElement, Event>,
-  fallbackSrc?: string
-) {
-  const target = e.currentTarget;
-  if (target.dataset.failed === "true") {
-    // If fallback also fails, avoid infinite loop
-    return;
-  }
-  target.dataset.failed = "true";
-
-  const originalSrc = target.src || "";
-  // If it was a direct RAWG or media URL that failed, try wsrv.nl proxy first
-  if (
-    (originalSrc.includes("media.rawg.io") || originalSrc.includes("rawg.io")) &&
-    !originalSrc.includes("wsrv.nl")
-  ) {
-    target.src = `https://wsrv.nl/?url=${encodeURIComponent(originalSrc)}&w=400&output=webp`;
-    return;
-  }
-
-  target.src = fallbackSrc || DEFAULT_POSTER_FALLBACK;
-}
-
 export function getPosterUrl(posterPath?: string | null): string | null {
   if (!posterPath) return null;
-  if (posterPath.startsWith("http://") || posterPath.startsWith("https://")) {
-    // If it is from RAWG, route through wsrv.nl CDN to prevent CORS / hotlinking / 403 blocks
-    if (posterPath.includes("media.rawg.io") || posterPath.includes("rawg.io")) {
-      return `https://wsrv.nl/?url=${encodeURIComponent(posterPath)}&w=400&output=webp`;
-    }
-    return posterPath;
-  }
   return `${POSTER_BASE}${posterPath}`;
 }
 
 export function getBackdropUrl(backdropPath?: string | null): string | null {
   if (!backdropPath) return null;
-  if (backdropPath.startsWith("http://") || backdropPath.startsWith("https://")) {
-    if (backdropPath.includes("media.rawg.io") || backdropPath.includes("rawg.io")) {
-      return `https://wsrv.nl/?url=${encodeURIComponent(backdropPath)}&w=800&output=webp`;
-    }
-    return backdropPath;
-  }
   return `${BACKDROP_BASE}${backdropPath}`;
 }
 
 export function getStillUrl(stillPath?: string | null): string | null {
   if (!stillPath) return null;
-  if (stillPath.startsWith("http://") || stillPath.startsWith("https://")) {
-    if (stillPath.includes("media.rawg.io") || stillPath.includes("rawg.io")) {
-      return `https://wsrv.nl/?url=${encodeURIComponent(stillPath)}&w=400&output=webp`;
-    }
-    return stillPath;
-  }
   return `${STILL_BASE}${stillPath}`;
 }
 

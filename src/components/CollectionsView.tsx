@@ -32,11 +32,7 @@ import {
   removeMovieFromCollection,
   type ComputedCollection,
 } from "../lib/collections";
-import {
-  getPosterUrl,
-  handleImageError,
-  DEFAULT_POSTER_FALLBACK,
-} from "../lib/api";
+import { getPosterUrl } from "../lib/api";
 import { OttBadge } from "./OttBadge";
 
 interface CollectionsViewProps {
@@ -385,10 +381,6 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                         src={getPosterUrl(col.coverPoster) || ""}
                         alt=""
                         className="absolute inset-0 w-full h-full object-cover blur-xl opacity-25 scale-110"
-                        referrerPolicy="no-referrer"
-                        onError={(e) =>
-                          handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                        }
                       />
                     )}
 
@@ -399,14 +391,10 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                           <img
                             src={
                               getPosterUrl(col.posters[0]) ||
-                              DEFAULT_POSTER_FALLBACK
+                              "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
                             }
                             alt=""
                             className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                            onError={(e) =>
-                              handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                            }
                           />
                         </div>
                       ) : col.posters.length > 1 ? (
@@ -443,14 +431,10 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                               <img
                                 src={
                                   posterUrl ||
-                                  DEFAULT_POSTER_FALLBACK
+                                  "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
                                 }
                                 alt=""
                                 className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
-                                onError={(e) =>
-                                  handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                                }
                               />
                             </div>
                           );
@@ -691,14 +675,10 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                       <img
                         src={
                           getPosterUrl(nextMovieToWatch.poster_path) ||
-                          DEFAULT_POSTER_FALLBACK
+                          "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
                         }
                         alt={nextMovieToWatch.title}
                         className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                        onError={(e) =>
-                          handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                        }
                       />
                     </div>
                     <div className="min-w-0">
@@ -783,14 +763,10 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                         <img
                           src={
                             posterUrl ||
-                            DEFAULT_POSTER_FALLBACK
+                            "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
                           }
                           alt={movie.title}
                           className="w-9 h-13 rounded-lg object-cover border border-zinc-700/80 shrink-0"
-                          referrerPolicy="no-referrer"
-                          onError={(e) =>
-                            handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                          }
                         />
                         <div className="flex-1 min-w-0 pr-1">
                           <h4 className="text-xs sm:text-sm font-semibold text-zinc-100 group-hover:text-amber-400 transition-colors truncate">
@@ -908,14 +884,10 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                       <img
                         src={
                           getPosterUrl(m.poster_path) ||
-                          DEFAULT_POSTER_FALLBACK
+                          "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
                         }
                         alt={m.title}
                         className="w-7 h-10 rounded-md object-cover border border-zinc-700/80 shrink-0"
-                        referrerPolicy="no-referrer"
-                        onError={(e) =>
-                          handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                        }
                       />
                       <div className="truncate">
                         <p className="text-xs sm:text-sm font-semibold truncate">{m.title}</p>

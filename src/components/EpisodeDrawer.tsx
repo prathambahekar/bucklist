@@ -22,8 +22,6 @@ import {
   getPosterUrl,
   getBackdropUrl,
   getStillUrl,
-  handleImageError,
-  DEFAULT_POSTER_FALLBACK,
 } from "../lib/api";
 import {
   getSeriesWatchedEpisodes,
@@ -408,12 +406,11 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
               <img
                 src={
                   getPosterUrl(movie.poster_path) ||
-                  DEFAULT_POSTER_FALLBACK
+                  "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=120&auto=format&fit=crop&q=60"
                 }
                 alt={movie.title}
                 className="w-14 h-20 sm:w-16 sm:h-24 object-cover rounded-xl bg-zinc-900 shadow-md shrink-0 border border-zinc-800/80"
                 referrerPolicy="no-referrer"
-                onError={(e) => handleImageError(e, DEFAULT_POSTER_FALLBACK)}
               />
 
               <div className="flex-1 min-w-0">
@@ -642,9 +639,6 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
                           alt={ep.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           referrerPolicy="no-referrer"
-                          onError={(e) =>
-                            handleImageError(e, DEFAULT_POSTER_FALLBACK)
-                          }
                         />
                       ) : (
                         <Film className="w-6 h-6 text-zinc-600" />

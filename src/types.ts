@@ -84,33 +84,9 @@ export function normalizePriority(raw?: any): PriorityLevel {
   return "wanna_see";
 }
 
-export type AppMode = "cinema" | "games";
-
-export function getPriorityConfig(
-  priority?: PriorityLevel | string | null,
-  mode: AppMode = "cinema"
-): PriorityConfig {
+export function getPriorityConfig(priority?: PriorityLevel | string | null): PriorityConfig {
   const norm = normalizePriority(priority);
-  const base = PRIORITY_CONFIGS[norm] || PRIORITY_CONFIGS.wanna_see;
-  if (mode === "games") {
-    if (norm === "must_watch") {
-      return {
-        ...base,
-        label: "Must Play",
-        shortLabel: "Must Play",
-        description: "Highest priority • Play next",
-      };
-    }
-    if (norm === "wanna_see") {
-      return {
-        ...base,
-        label: "Wanna Play",
-        shortLabel: "Wanna Play",
-        description: "Standard backlog item",
-      };
-    }
-  }
-  return base;
+  return PRIORITY_CONFIGS[norm] || PRIORITY_CONFIGS.wanna_see;
 }
 
 export interface WatchlistMovie {
@@ -119,7 +95,7 @@ export interface WatchlistMovie {
   title: string;
   poster_path: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv" | "game";
+  media_type?: "movie" | "tv";
   genres: string[];
   platforms: string[];
   priority?: PriorityLevel;
@@ -129,8 +105,6 @@ export interface WatchlistMovie {
   watched_platform?: string | null;
   rating: number | null;
   created_at: string;
-  metacritic?: number | null;
-  playtime?: number | null;
 }
 
 export interface SearchResult {
@@ -138,12 +112,10 @@ export interface SearchResult {
   title: string;
   poster_path: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv" | "game";
+  media_type?: "movie" | "tv";
   overview: string | null;
   genres: string[];
   platforms: string[];
-  metacritic?: number | null;
-  rating?: number | null;
 }
 
 export interface MovieDetailExtra {
@@ -251,7 +223,7 @@ export interface BlendMovie {
   poster_path: string | null;
   backdrop_path?: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv" | "game";
+  media_type?: "movie" | "tv";
   genres: string[];
   platforms: string[];
   runtime?: string;
@@ -313,7 +285,6 @@ export interface BucklistBackupData {
   appName?: string;
   exportedAt: string;
   watchlist: WatchlistMovie[];
-  gameWatchlist?: WatchlistMovie[];
   collections?: MovieCollection[];
   blends?: Blend[];
   tvProgress?: Record<
@@ -330,7 +301,6 @@ export interface BucklistBackupData {
     watchedViewMode?: WatchedViewMode;
     watchedCategory?: "all" | "movies" | "series" | "anime";
     timelinePeriod?: TimelinePeriod;
-    appMode?: AppMode;
   };
   stats?: {
     totalItems: number;

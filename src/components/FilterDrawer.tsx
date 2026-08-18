@@ -17,7 +17,6 @@ import {
   PRIORITY_ORDER,
   WatchedCategory,
   TimelinePeriod,
-  AppMode,
 } from "../types";
 import { getPlatformAccentTheme } from "./OttBadge";
 
@@ -56,7 +55,6 @@ interface FilterDrawerProps {
   onSelectGenre: (genre: string | null) => void;
   onResetFilters: () => void;
   hasActiveFilters: boolean;
-  appMode?: AppMode;
 }
 
 export function FilterDrawer({
@@ -83,9 +81,7 @@ export function FilterDrawer({
   onSelectGenre,
   onResetFilters,
   hasActiveFilters,
-  appMode = "cinema",
 }: FilterDrawerProps) {
-  const isGames = appMode === "games";
   // Section expand/collapse state
   const [isPriorityOpen, setIsPriorityOpen] = useState(true);
   const [isCategoryOpen, setIsCategoryOpen] = useState(true);
@@ -252,8 +248,8 @@ export function FilterDrawer({
             </div>
           )}
 
-          {/* Watched Tab: Category Selection (All / Movies / Series / Anime) - Cinema mode only */}
-          {!isGames && tab === "watched" && onSelectWatchedCategory && (
+          {/* Watched Tab: Category Selection (All / Movies / Series / Anime) */}
+          {tab === "watched" && onSelectWatchedCategory && (
             <div id="drawer-watched-category-group" className="space-y-2">
               <button
                 type="button"
@@ -536,7 +532,7 @@ export function FilterDrawer({
             </div>
           )}
 
-          {/* Platforms Filter */}
+          {/* OTT Platforms Filter */}
           {allPlatforms.length > 0 && (
             <div id="drawer-platform-group" className="space-y-2">
               <div className="flex items-center justify-between">
@@ -546,7 +542,7 @@ export function FilterDrawer({
                   onClick={() => setIsPlatformOpen(!isPlatformOpen)}
                   className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-zinc-400 uppercase hover:text-zinc-200 transition-colors cursor-pointer group"
                 >
-                  <span>{isGames ? "Gaming Platform" : "Streaming Platform"}</span>
+                  <span>Streaming Platform</span>
                   {selectedPlatform && (
                     <span className="text-[10px] lowercase bg-zinc-800 text-zinc-200 px-1.5 py-0.2 rounded-full font-medium">
                       {selectedPlatform}

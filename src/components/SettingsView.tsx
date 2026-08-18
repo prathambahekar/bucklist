@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import {
   Download,
   Upload,
@@ -16,10 +16,6 @@ import {
   Users,
   Layers,
   Code2,
-  Gamepad2,
-  Film,
-  Key,
-  ExternalLink,
 } from "lucide-react";
 import {
   downloadBackupToStorage,
@@ -32,14 +28,8 @@ import {
   getLocalCollectionsEnabled,
   saveLocalCollectionsEnabled,
 } from "../lib/storage";
-import {
-  getRawgApiKey,
-  setRawgApiKey,
-  resetRawgApiKey,
-  DEFAULT_RAWG_API_KEY,
-} from "../lib/rawgApi";
 import type { TvProgressMap } from "../lib/storage";
-import type { ImportValidationResult, WatchlistMovie, AppMode } from "../types";
+import type { ImportValidationResult, WatchlistMovie } from "../types";
 import { StatsView } from "./StatsView";
 
 interface SettingsViewProps {
@@ -52,8 +42,6 @@ interface SettingsViewProps {
   onToggleCollections: (enabled: boolean) => void;
   onDataUpdated: () => void;
   onNavigateToWatchlist?: () => void;
-  appMode?: AppMode;
-  onToggleAppMode?: (mode: AppMode) => void;
 }
 
 export function SettingsView({
@@ -66,16 +54,9 @@ export function SettingsView({
   onToggleCollections,
   onDataUpdated,
   onNavigateToWatchlist,
-  appMode = "cinema",
-  onToggleAppMode,
 }: SettingsViewProps) {
   // Settings view mode: "stats" | "data" | "developer"
   const [activeTab, setActiveTab] = useState<"stats" | "data" | "developer">("stats");
-
-  // RAWG API Key Settings State
-  const [rawgKeyInput, setRawgKeyInput] = useState<string>(() => getRawgApiKey());
-  const [rawgKeyStatus, setRawgKeyStatus] = useState<"idle" | "testing" | "valid" | "error">("idle");
-  const [rawgKeyMessage, setRawgKeyMessage] = useState<string | null>(null);
 
   // Reset confirmation modal state
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
@@ -263,163 +244,12 @@ export function SettingsView({
           movies={movies}
           tvProgressMap={tvProgressMap}
           onNavigateToWatchlist={onNavigateToWatchlist}
-          appMode={appMode}
         />
       )}
 
       {/* DEVELOPER VIEW */}
       {activeTab === "developer" && (
         <div id="developer-settings-tab" className="max-w-md mx-auto space-y-4 animate-in fade-in duration-200">
-          {/* Active Library Mode Selector Card */}
-          <div className="bg-[#18181b] border border-zinc-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-3.5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-400/15 border border-amber-400/25 flex items-center justify-center text-amber-400 shadow-sm shrink-0">
-                {appMode === "games" ? <Gamepad2 className="w-5 h-5" /> : <Film className="w-5 h-5" />}
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-zinc-100 tracking-tight leading-tight">
-                  Active Library Mode
-                </h2>
-                <p className="text-[11px] text-zinc-400 leading-tight mt-0.5">
-                  Switch between Movies & TV Series or Video Game Backlog
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 bg-zinc-950/70 p-1.5 rounded-2xl border border-zinc-800/80">
-              <button
-                type="button"
-                id="mode-switch-cinema-btn"
-                onClick={() => onToggleAppMode?.("cinema")}
-                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  appMode === "cinema"
-                    ? "bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/20"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-                }`}
-              >
-                <Film className="w-4 h-4" />
-                <span>Cinema</span>
-              </button>
-
-              <button
-                type="button"
-                id="mode-switch-games-btn"
-                onClick={() => onToggleAppMode?.("games")}
-                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  appMode === "games"
-                    ? "bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-                }`}
-              >
-                <Gamepad2 className="w-4 h-4" />
-                <span>Video Games</span>
-              </button>
-            </div>
-            <p className="text-[11px] text-zinc-500 px-1">
-              {appMode === "cinema"
-                ? "Tracks films, seasons, and episodes with TMDB integration."
-                : "Tracks video game backlogs, Metacritic scores, and platforms with RAWG integration."}
-            </p>
-          </div>
-
-          {/* RAWG Database & API Key Card */}
-          <div className="bg-[#18181b] border border-zinc-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shadow-sm shrink-0">
-                  <Key className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-zinc-100 tracking-tight leading-tight">
-                    RAWG Games API Key
-                  </h2>
-                  <p className="text-[11px] text-zinc-400 leading-tight mt-0.5">
-                    Configure custom API key for game search & metadata
-                  </p>
-                </div>
-              </div>
-              <span className="text-[9px] bg-emerald-500/15 text-emerald-300 font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                RAWG v1.0
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              <div className="relative">
-                <input
-                  type="text"
-                  id="rawg-api-key-input"
-                  value={rawgKeyInput}
-                  onChange={(e) => {
-                    setRawgKeyInput(e.target.value);
-                    setRawgKeyStatus("idle");
-                    setRawgKeyMessage(null);
-                  }}
-                  placeholder="Enter RAWG API Key..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500 transition-colors"
-                />
-              </div>
-
-              {rawgKeyMessage && (
-                <p
-                  className={`text-[11px] font-medium leading-tight flex items-center gap-1.5 ${
-                    rawgKeyStatus === "valid" ? "text-emerald-400" : "text-rose-400"
-                  }`}
-                >
-                  {rawgKeyStatus === "valid" ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  )}
-                  <span>{rawgKeyMessage}</span>
-                </p>
-              )}
-
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  id="save-rawg-key-btn"
-                  onClick={() => {
-                    setRawgApiKey(rawgKeyInput);
-                    setRawgKeyStatus("valid");
-                    setRawgKeyMessage("RAWG API key saved successfully.");
-                    setTimeout(() => setRawgKeyMessage(null), 3500);
-                  }}
-                  className="flex-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer text-center"
-                >
-                  Save Key
-                </button>
-
-                <button
-                  type="button"
-                  id="reset-rawg-key-btn"
-                  onClick={() => {
-                    resetRawgApiKey();
-                    setRawgKeyInput(DEFAULT_RAWG_API_KEY);
-                    setRawgKeyStatus("valid");
-                    setRawgKeyMessage("Reset to default public RAWG key.");
-                    setTimeout(() => setRawgKeyMessage(null), 3500);
-                  }}
-                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-semibold text-xs rounded-xl border border-zinc-800 transition-colors cursor-pointer"
-                >
-                  Reset Default
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1">
-                <span>Free keys provide 20,000 reqs/month</span>
-                <a
-                  href="https://rawg.io/apidocs"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-emerald-400 hover:underline inline-flex items-center gap-1"
-                >
-                  <span>rawg.io/apidocs</span>
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              </div>
-            </div>
-          </div>
-
           {/* Experimental Features & Feature Flags Card */}
           <div className="bg-[#18181b] border border-zinc-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-3.5">
             <div className="flex items-center gap-3">

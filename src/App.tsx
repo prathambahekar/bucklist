@@ -33,17 +33,10 @@ import {
   Users,
   Flame,
   ArrowUpDown,
-  Gamepad2,
-  ArrowLeftRight,
 } from "lucide-react";
 import {
   getLocalWatchlist,
   saveLocalWatchlist,
-  getLocalGameWatchlist,
-  saveLocalGameWatchlist,
-  getLocalAppMode,
-  saveLocalAppMode,
-  AppMode,
   getLocalTvProgress,
   getSeriesSeasonRatings,
   getLocalWatchedViewMode,
@@ -77,7 +70,6 @@ import {
   detectMediaType,
   normalizePlatformsList,
 } from "./lib/api";
-import { fetchGameDetails } from "./lib/rawgApi";
 import { EpisodeDrawer } from "./components/EpisodeDrawer";
 import { StarRating } from "./components/StarRating";
 import { OttBadge, getPlatformAccentTheme } from "./components/OttBadge";
@@ -118,7 +110,6 @@ function getLocalTodayString(): string {
 }
 
 export default function App() {
-  const [appMode, setAppMode] = useState<AppMode>(() => getLocalAppMode());
   const [tab, setTab] = useState<TabType>("towatch");
   const [movies, setMovies] = useState<WatchlistMovie[]>([]);
   const [watched, setWatched] = useState<WatchlistMovie[]>([]);
@@ -285,31 +276,6 @@ export default function App() {
     saveLocalWatchedCategory(cat);
   }, []);
 
-  const handleToggleAppMode = useCallback((mode: AppMode) => {
-    setAppMode(mode);
-    saveLocalAppMode(mode);
-    setSelectedGenre(null);
-    setSelectedPlatform(null);
-    setSelectedPriorityFilter("all");
-    setSelectedMovieIds([]);
-    setIsBatchMode(false);
-  }, []);
-
-  const getActiveList = useCallback((): WatchlistMovie[] => {
-    return appMode === "games" ? getLocalGameWatchlist() : getLocalWatchlist();
-  }, [appMode]);
-
-  const saveActiveList = useCallback(
-    (items: WatchlistMovie[]) => {
-      if (appMode === "games") {
-        saveLocalGameWatchlist(items);
-      } else {
-        saveLocalWatchlist(items);
-      }
-    },
-    [appMode]
-  );
-
   // Load TV progress
   useEffect(() => {
     setTvProgressMap(getLocalTvProgress());
@@ -371,7 +337,6 @@ export default function App() {
   const isItemTv = useCallback(
     (item: WatchlistMovie | SearchResult | null | undefined): boolean => {
       if (!item) return false;
-      if (appMode === "games" || item.media_type === "game") return false;
       // Strictly respect media_type
       if (item.media_type === "tv") return true;
       if (item.media_type === "movie") return false;
@@ -395,22 +360,11 @@ export default function App() {
       }
       return false;
     },
-    [knownTvTmdbIds, appMode]
+    [knownTvTmdbIds]
   );
 
   const fetchAll = useCallback(async () => {
     try {
-      if (appMode === "games") {
-        const all = getLocalGameWatchlist();
-        setMovies(all.filter((m) => !m.watched));
-        setWatched(
-          all
-            .filter((m) => m.watched)
-            .sort((a, b) => (b.watched_date || "").localeCompare(a.watched_date || ""))
-        );
-        return;
-      }
-
       const all = getLocalWatchlist();
 
       // Collect known TV IDs only from items that are verified as TV
@@ -475,33 +429,17 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [appMode]);
+  }, []);
 
   useEffect(() => {
     fetchAll();
-  }, [fetchAll, appMode]);
+  }, [fetchAll]);
 
   // Fetch extra details when detail modal opens
   useEffect(() => {
     if (!detailMovie?.tmdb_id) {
       setDetailExtra(null);
       setDetailExtraLoading(false);
-      return;
-    }
-
-    const isGame = appMode === "games" || detailMovie.media_type === "game";
-    if (isGame) {
-      (async () => {
-        setDetailExtraLoading(true);
-        try {
-          const res = await fetchGameDetails(detailMovie.tmdb_id);
-          setDetailExtra(res.detailExtra);
-        } catch (e) {
-          console.error("Game detail fetch error:", e);
-        } finally {
-          setDetailExtraLoading(false);
-        }
-      })();
       return;
     }
 
@@ -580,11 +518,11 @@ export default function App() {
         setDetailExtraLoading(false);
       }
     })();
-  }, [detailMovie, appMode]);
+  }, [detailMovie]);
 
   const handleSelectPriorityAndAdd = useCallback(
     (priority: PriorityLevel, item: SearchResult | WatchlistMovie) => {
-      const current = getActiveList();
+      const current = getLocalWatchlist();
       const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
       const existingInWatched = current.find((m) => m.tmdb_id === item.tmdb_id && m.watched);
 
@@ -594,7 +532,7 @@ export default function App() {
           priority,
         };
         const updated = current.map((m) => (m.id === existingInWatchlist.id ? updatedMovie : m));
-        saveActiveList(updated);
+        saveLocalWatchlist(updated);
         setMovies((prev) => prev.map((m) => (m.id === existingInWatchlist.id ? updatedMovie : m)));
       } else if (existingInWatched) {
         const unwatchedMovie: WatchlistMovie = {
@@ -604,7 +542,7 @@ export default function App() {
           priority,
         };
         const updated = current.map((m) => (m.id === existingInWatched.id ? unwatchedMovie : m));
-        saveActiveList(updated);
+        saveLocalWatchlist(updated);
         setWatched((prev) => prev.filter((m) => m.id !== existingInWatched.id));
         setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.id !== existingInWatched.id)]);
       } else {
@@ -614,7 +552,7 @@ export default function App() {
           title: item.title,
           poster_path: item.poster_path,
           release_year: item.release_year,
-          media_type: item.media_type || (appMode === "games" ? "game" : undefined),
+          media_type: item.media_type,
           genres: item.genres || [],
           platforms: normalizePlatformsList(item.platforms || []),
           priority,
@@ -624,13 +562,13 @@ export default function App() {
           created_at: new Date().toISOString(),
         };
         const updated = [newRecord, ...current];
-        saveActiveList(updated);
+        saveLocalWatchlist(updated);
         setMovies((prev) => [newRecord, ...prev]);
       }
       setPriorityModalMovie(null);
       setAddingId(null);
     },
-    [getActiveList, saveActiveList, appMode]
+    []
   );
 
   async function handleAdd(item: SearchResult) {
@@ -638,12 +576,12 @@ export default function App() {
   }
 
   const handlePromptAddToWatchlist = useCallback((item: SearchResult | WatchlistMovie) => {
-    const current = getActiveList();
+    const current = getLocalWatchlist();
     const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
     if (existingInWatchlist) {
-      // Re-clicking in drawer removes/undoes
+      // Re-clicking "In Watchlist" in drawer removes/undoes
       const updated = current.filter((m) => m.id !== existingInWatchlist.id);
-      saveActiveList(updated);
+      saveLocalWatchlist(updated);
       setMovies((prev) => prev.filter((m) => m.id !== existingInWatchlist.id));
     } else {
       // Open priority picker modal
@@ -652,7 +590,7 @@ export default function App() {
         normalizePriority(("priority" in item && item.priority) ? item.priority : "wanna_see")
       );
     }
-  }, [getActiveList, saveActiveList]);
+  }, []);
 
   const handleAddToWatchlist = useCallback(
     async (item: SearchResult) => {
@@ -694,14 +632,14 @@ export default function App() {
 
   const handleToggleWatched = useCallback(
     (item: SearchResult) => {
-      const current = getActiveList();
+      const current = getLocalWatchlist();
       const existingInWatched = current.find((m) => m.tmdb_id === item.tmdb_id && m.watched);
       const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
 
       if (existingInWatched) {
-        // Re-clicking undoes the watched task: remove from watched
+        // Re-clicking "Watched" / "Mark Watched" undoes the watched task: remove from watched
         const updated = current.filter((m) => m.id !== existingInWatched.id);
-        saveActiveList(updated);
+        saveLocalWatchlist(updated);
         setWatched((prev) => prev.filter((m) => m.id !== existingInWatched.id));
       } else if (existingInWatchlist) {
         handleOpenWatchedModal(existingInWatchlist, 5);
@@ -713,7 +651,7 @@ export default function App() {
           title: item.title,
           poster_path: item.poster_path,
           release_year: item.release_year,
-          media_type: item.media_type || (appMode === "games" ? "game" : undefined),
+          media_type: item.media_type,
           genres: item.genres || [],
           platforms: normalizePlatformsList(item.platforms || []),
           watched: false,
@@ -724,7 +662,7 @@ export default function App() {
         handleOpenWatchedModal(newRecord, 5);
       }
     },
-    [getActiveList, saveActiveList, handleOpenWatchedModal, appMode]
+    [handleOpenWatchedModal]
   );
 
   const handleAddToWatched = useCallback(
@@ -739,17 +677,18 @@ export default function App() {
     const watchedDate = userWatchedDate || watchedModalMovie.watched_date || getLocalTodayString();
 
     // Prepare platform list and selected venue:
+    // When marked as watched, store ONLY the selected OTT or Theatre/Other
     let finalPlatform = "";
     if (userWatchedVenue === "theatre") {
       finalPlatform = "Theatre";
     } else if (userWatchedVenue === "other") {
       finalPlatform = userWatchedPlatform.trim() || "Other";
     } else {
-      // OTT / Digital
+      // OTT
       finalPlatform =
         userWatchedPlatform.trim() ||
         (watchedModalMovie.platforms && watchedModalMovie.platforms[0]) ||
-        (appMode === "games" ? "Digital" : "OTT");
+        "OTT";
     }
 
     const updatedPlatforms = [finalPlatform];
@@ -772,11 +711,11 @@ export default function App() {
 
     setWatchedModalMovie(null);
 
-    // Save to active list
-    const current = getActiveList();
+    // Save to local storage
+    const current = getLocalWatchlist();
     const filtered = current.filter((m) => m.tmdb_id !== watchedModalMovie.tmdb_id);
     const updatedList = [updatedMovie, ...filtered];
-    saveActiveList(updatedList);
+    saveLocalWatchlist(updatedList);
   }
 
   async function handleMarkSeriesWatched(series: WatchlistMovie, rating: number = 5) {
@@ -792,9 +731,9 @@ export default function App() {
     setWatched((prev) => [updatedMovie, ...prev.filter((m) => m.id !== series.id)]);
     setActiveTvDrawerMovie(null);
 
-    const current = getActiveList();
+    const current = getLocalWatchlist();
     const updatedList = current.map((m) => (m.id === series.id ? updatedMovie : m));
-    saveActiveList(updatedList);
+    saveLocalWatchlist(updatedList);
   }
 
   async function handleTvProgressUpdated(tmdbId: number, watchedCount: number, totalCount: number) {
@@ -832,9 +771,9 @@ export default function App() {
         setMovies((prev) => prev.filter((m) => m.tmdb_id !== tmdbId));
         setWatched((prev) => [updatedMovie, ...prev.filter((m) => m.tmdb_id !== tmdbId)]);
 
-        const current = getActiveList();
+        const current = getLocalWatchlist();
         const updatedList = current.map((m) => (m.tmdb_id === tmdbId ? updatedMovie : m));
-        saveActiveList(updatedList);
+        saveLocalWatchlist(updatedList);
       }
     } else if (totalCount > 0 && watchedCount < totalCount) {
       // Revert if user unchecks an episode from 100%
@@ -849,9 +788,9 @@ export default function App() {
         setWatched((prev) => prev.filter((m) => m.tmdb_id !== tmdbId));
         setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.tmdb_id !== tmdbId)]);
 
-        const current = getActiveList();
+        const current = getLocalWatchlist();
         const updatedList = current.map((m) => (m.tmdb_id === tmdbId ? unwatchedMovie : m));
-        saveActiveList(updatedList);
+        saveLocalWatchlist(updatedList);
       }
     }
   }
@@ -864,11 +803,11 @@ export default function App() {
       prev.map((m) => (m.tmdb_id === tmdbId ? { ...m, rating: newRating } : m))
     );
 
-    const current = getActiveList();
+    const current = getLocalWatchlist();
     const updatedList = current.map((m) =>
       m.tmdb_id === tmdbId ? { ...m, rating: newRating } : m
     );
-    saveActiveList(updatedList);
+    saveLocalWatchlist(updatedList);
   }
 
   async function handleDelete(id: string) {
@@ -876,8 +815,8 @@ export default function App() {
     setWatched((prev) => prev.filter((m) => m.id !== id));
     setSelectedMovieIds((prev) => prev.filter((selectedId) => selectedId !== id));
 
-    const current = getActiveList();
-    saveActiveList(current.filter((m) => m.id !== id));
+    const current = getLocalWatchlist();
+    saveLocalWatchlist(current.filter((m) => m.id !== id));
   }
 
   // Batch Multi-Select Handlers
@@ -902,13 +841,13 @@ export default function App() {
     setMovies((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
     setWatched((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
 
-    const current = getActiveList();
+    const current = getLocalWatchlist();
     const updatedList = current.filter((m) => !idsToDelete.has(m.id));
-    saveActiveList(updatedList);
+    saveLocalWatchlist(updatedList);
 
     setSelectedMovieIds([]);
     setIsBatchMode(false);
-  }, [selectedMovieIds, getActiveList, saveActiveList]);
+  }, [selectedMovieIds]);
 
   const handleBatchMarkWatched = useCallback(
     (rating: number = 5) => {
@@ -927,7 +866,7 @@ export default function App() {
       setMovies((prev) => prev.filter((m) => !idsToMark.has(m.id)));
       setWatched((prev) => [...newlyWatched, ...prev.filter((m) => !idsToMark.has(m.id))]);
 
-      const current = getActiveList();
+      const current = getLocalWatchlist();
       const updatedList = current.map((m) => {
         if (idsToMark.has(m.id)) {
           return {
@@ -939,12 +878,12 @@ export default function App() {
         }
         return m;
       });
-      saveActiveList(updatedList);
+      saveLocalWatchlist(updatedList);
 
       setSelectedMovieIds([]);
       setIsBatchMode(false);
     },
-    [selectedMovieIds, movies, getActiveList, saveActiveList]
+    [selectedMovieIds, movies]
   );
 
   const handleBatchMoveToWatchlist = useCallback(() => {
@@ -961,7 +900,7 @@ export default function App() {
     setWatched((prev) => prev.filter((m) => !idsToMove.has(m.id)));
     setMovies((prev) => [...newlyUnwatched, ...prev.filter((m) => !idsToMove.has(m.id))]);
 
-    const current = getActiveList();
+    const current = getLocalWatchlist();
     const updatedList = current.map((m) => {
       if (idsToMove.has(m.id)) {
         return {
@@ -972,11 +911,11 @@ export default function App() {
       }
       return m;
     });
-    saveActiveList(updatedList);
+    saveLocalWatchlist(updatedList);
 
     setSelectedMovieIds([]);
     setIsBatchMode(false);
-  }, [selectedMovieIds, watched, getActiveList, saveActiveList]);
+  }, [selectedMovieIds, watched]);
 
   const handleBatchAddGenre = useCallback(
     (newGenre: string) => {
@@ -993,11 +932,11 @@ export default function App() {
       setMovies((prev) => prev.map(updateItemGenres));
       setWatched((prev) => prev.map(updateItemGenres));
 
-      const current = getActiveList();
+      const current = getLocalWatchlist();
       const updatedList = current.map(updateItemGenres);
-      saveActiveList(updatedList);
+      saveLocalWatchlist(updatedList);
     },
-    [selectedMovieIds, getActiveList, saveActiveList]
+    [selectedMovieIds]
   );
 
   const handleUpdatePriority = useCallback(
@@ -1014,13 +953,13 @@ export default function App() {
         setDetailMovie((prev) => (prev ? { ...prev, priority: newPriority } : null));
       }
 
-      const current = getActiveList();
+      const current = getLocalWatchlist();
       const updatedList = current.map((m) =>
         m.id === movieId ? { ...m, priority: newPriority } : m
       );
-      saveActiveList(updatedList);
+      saveLocalWatchlist(updatedList);
     },
-    [detailMovie, getActiveList, saveActiveList]
+    [detailMovie]
   );
 
   const handleBatchSetPriority = useCallback(
@@ -1035,16 +974,16 @@ export default function App() {
         prev.map((m) => (targetIds.has(m.id) ? { ...m, priority } : m))
       );
 
-      const current = getActiveList();
+      const current = getLocalWatchlist();
       const updatedList = current.map((m) =>
         targetIds.has(m.id) ? { ...m, priority } : m
       );
-      saveActiveList(updatedList);
+      saveLocalWatchlist(updatedList);
 
       setSelectedMovieIds([]);
       setIsBatchMode(false);
     },
-    [selectedMovieIds, getActiveList, saveActiveList]
+    [selectedMovieIds]
   );
 
   const handleMoveToWatchlist = useCallback((item: WatchlistMovie) => {
@@ -1057,10 +996,10 @@ export default function App() {
     setWatched((prev) => prev.filter((m) => m.id !== item.id));
     setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.id !== item.id)]);
 
-    const current = getActiveList();
+    const current = getLocalWatchlist();
     const updatedList = current.map((m) => (m.id === item.id ? unwatchedMovie : m));
-    saveActiveList(updatedList);
-  }, [getActiveList, saveActiveList]);
+    saveLocalWatchlist(updatedList);
+  }, []);
 
   const handleUpdateWatchedDate = useCallback((item: WatchlistMovie, newDate: string) => {
     const updatedMovie: WatchlistMovie = {
@@ -1068,10 +1007,10 @@ export default function App() {
       watched_date: newDate,
     };
     setWatched((prev) => prev.map((m) => (m.id === item.id ? updatedMovie : m)));
-    const current = getActiveList();
+    const current = getLocalWatchlist();
     const updatedList = current.map((m) => (m.id === item.id ? updatedMovie : m));
-    saveActiveList(updatedList);
-  }, [getActiveList, saveActiveList]);
+    saveLocalWatchlist(updatedList);
+  }, []);
 
   const existingTmdbIds = useMemo(
     () => new Set<number>([...movies.map((m) => m.tmdb_id), ...watched.map((m) => m.tmdb_id)]),
@@ -1305,7 +1244,7 @@ export default function App() {
           disabled={isBatchMode}
           onSwipeRight={handleCardSwipeRight}
           onSwipeLeft={handleCardSwipeLeft}
-          rightActionLabel={isWatchedTab ? "Rate" : (appMode === "games" ? "Played" : "Watched")}
+          rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
           leftActionLabel="Delete"
           className="h-full"
         >
@@ -1376,7 +1315,7 @@ export default function App() {
           disabled={isBatchMode}
           onSwipeRight={handleCardSwipeRight}
           onSwipeLeft={handleCardSwipeLeft}
-          rightActionLabel={isWatchedTab ? "Rate" : (appMode === "games" ? "Played" : "Watched")}
+          rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
           leftActionLabel="Delete"
           className="h-full"
         >
@@ -1490,7 +1429,7 @@ export default function App() {
                     className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-center gap-1 bg-zinc-100 hover:bg-amber-400 text-zinc-950 text-[10px] font-bold py-1 px-2 rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
                   >
                     <Check className="w-3 h-3 stroke-[2.5]" />
-                    <span>{appMode === "games" ? "Played" : "Watched"}</span>
+                    <span>Watched</span>
                   </button>
                 )
               )}
@@ -1555,7 +1494,7 @@ export default function App() {
           disabled={isBatchMode}
           onSwipeRight={handleCardSwipeRight}
           onSwipeLeft={handleCardSwipeLeft}
-          rightActionLabel={isWatchedTab ? "Rate" : (appMode === "games" ? "Played" : "Watched")}
+          rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
           leftActionLabel="Delete"
         >
           <div
@@ -1687,7 +1626,7 @@ export default function App() {
                   <span>{item.rating ? `${item.rating}★` : "Rate"}</span>
                 </button>
               ) : (
-                /* To Watch / To Play Tab: Sleek Watched / Played Button */
+                /* To Watch Tab: Sleek Watched Button */
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1695,10 +1634,10 @@ export default function App() {
                     handleOpenWatchedModal(item, 5);
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-100 hover:text-zinc-950 text-zinc-300 text-xs font-semibold border border-zinc-700/70 transition-all shadow-xs active:scale-95 cursor-pointer"
-                  title={appMode === "games" ? "Mark as Played" : "Mark as Watched"}
+                  title="Mark as Watched"
                 >
                   <Check className="w-3.5 h-3.5 stroke-[2.2]" />
-                  <span className="hidden xs:inline">{appMode === "games" ? "Played" : "Watched"}</span>
+                  <span className="hidden xs:inline">Watched</span>
                 </button>
               )}
 
@@ -1732,7 +1671,7 @@ export default function App() {
         disabled={isBatchMode}
         onSwipeRight={handleCardSwipeRight}
         onSwipeLeft={handleCardSwipeLeft}
-        rightActionLabel={isWatchedTab ? "Rate" : (appMode === "games" ? "Played" : "Watched")}
+        rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
         leftActionLabel="Delete"
       >
         <div
@@ -1820,12 +1759,7 @@ export default function App() {
                   />
                 )}
 
-                {appMode === "games" ? (
-                  <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                    <Gamepad2 className="w-2.5 h-2.5" />
-                    <span>Game</span>
-                  </span>
-                ) : isItemAnime(item) ? (
+                {isItemAnime(item) ? (
                   <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
                     <Sparkles className="w-2.5 h-2.5" />
                     <span>{isTv ? "Anime Series" : "Anime Movie"}</span>
@@ -1912,7 +1846,7 @@ export default function App() {
                       className="w-full flex items-center justify-center gap-2 bg-zinc-100 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 active:scale-98 shadow-sm py-2 sm:py-2.5 px-3 cursor-pointer"
                     >
                       <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
-                      <span className="whitespace-nowrap">{appMode === "games" ? "Mark as Played" : "Mark as Watched"}</span>
+                      <span className="whitespace-nowrap">Mark as Watched</span>
                     </button>
                   )
                 ) : (
@@ -1979,51 +1913,17 @@ export default function App() {
         {/* Header Bar */}
         <header id="app-header" className="flex items-center justify-between py-2 sm:py-3 mb-2 sm:mb-3">
           <div className="flex items-center gap-3 select-none">
-            <div
-              id="logo-badge"
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center text-zinc-950 shadow-lg ring-1 transition-all ${
-                appMode === "games"
-                  ? "bg-gradient-to-br from-emerald-400 to-teal-500 shadow-emerald-500/20 ring-emerald-400/40"
-                  : "bg-gradient-to-br from-amber-400 to-amber-500 shadow-amber-500/20 ring-amber-400/40"
-              }`}
-            >
-              {appMode === "games" ? (
-                <Gamepad2 className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
-              ) : (
-                <Bookmark className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
-              )}
+            <div id="logo-badge" className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-zinc-950 shadow-lg shadow-amber-500/20 ring-1 ring-amber-400/40">
+              <Bookmark className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
             </div>
             <div>
               <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-zinc-100 flex items-center gap-2">
                 <span>Bucklist</span>
-                <button
-                  type="button"
-                  id="app-mode-toggle-badge"
-                  onClick={() => handleToggleAppMode(appMode === "cinema" ? "games" : "cinema")}
-                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border transition-all cursor-pointer hover:scale-105 active:scale-95 flex items-center gap-1 shadow-xs ${
-                    appMode === "games"
-                      ? "text-emerald-300 bg-emerald-500/15 border-emerald-500/30 hover:bg-emerald-500/25"
-                      : "text-amber-300 bg-amber-500/15 border-amber-500/30 hover:bg-amber-500/25"
-                  }`}
-                  title={`Switch to ${appMode === "cinema" ? "Games" : "Cinema"} mode`}
-                >
-                  {appMode === "games" ? (
-                    <>
-                      <Gamepad2 className="w-2.5 h-2.5 text-emerald-400" />
-                      <span>Games</span>
-                    </>
-                  ) : (
-                    <>
-                      <Film className="w-2.5 h-2.5 text-amber-400" />
-                      <span>Cinema</span>
-                    </>
-                  )}
-                  <ArrowLeftRight className="w-2.5 h-2.5 opacity-60 ml-0.5" />
-                </button>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/90 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded-md hidden sm:inline-block">
+                  Cinema
+                </span>
               </h1>
-              <p className="text-[11px] text-zinc-500 hidden sm:block font-medium">
-                {appMode === "games" ? "Personal Video Game Backlog" : "Personal Movie & Series Tracker"}
-              </p>
+              <p className="text-[11px] text-zinc-500 hidden sm:block font-medium">Personal Movie & Series Tracker</p>
             </div>
           </div>
 
@@ -2083,8 +1983,6 @@ export default function App() {
               setTvProgressMap(getLocalTvProgress());
             }}
             onNavigateToWatchlist={() => setTab("towatch")}
-            appMode={appMode}
-            onToggleAppMode={handleToggleAppMode}
           />
         ) : tab === "blend" && blendEnabled ? (
           <BlendView
@@ -2336,9 +2234,7 @@ export default function App() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-amber-500">
             <Loader2 className="w-8 h-8 animate-spin" />
-            <p className="text-sm text-zinc-400">
-              {appMode === "games" ? "Loading your game backlog..." : "Loading your watchlist..."}
-            </p>
+            <p className="text-sm text-zinc-400">Loading your watchlist...</p>
           </div>
         ) : tab === "watched" && collectionsEnabled && watchedViewMode === "collections" ? (
           <CollectionsView
@@ -2367,19 +2263,13 @@ export default function App() {
             className="w-full py-16 flex flex-col items-center justify-center text-center px-4"
           >
             <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-zinc-600">
-              {appMode === "games" ? (
-                <Gamepad2 className="w-8 h-8 text-emerald-500/70" />
-              ) : (
-                <Film className="w-8 h-8" />
-              )}
+              <Film className="w-8 h-8" />
             </div>
             <h3 className="text-base font-semibold text-zinc-300 mb-1">
               {selectedGenre || selectedPlatform
                 ? "No matching titles found"
                 : tab === "towatch"
-                ? (appMode === "games" ? "Your backlog is empty" : "Your watchlist is empty")
-                : appMode === "games"
-                ? "No played games yet"
+                ? "Your watchlist is empty"
                 : watchedCategory === "movies"
                 ? "No watched movies yet"
                 : watchedCategory === "series"
@@ -2390,13 +2280,9 @@ export default function App() {
             </h3>
             <p className="text-xs text-zinc-500 max-w-sm mb-4">
               {selectedGenre || selectedPlatform
-                ? "Try adjusting or resetting your active filters above."
+                ? "Try adjusting or resetting your active OTT and Genre filters above."
                 : tab === "towatch"
-                ? (appMode === "games"
-                    ? "Search for any video game above to build your personal backlog."
-                    : "Search for any movie or TV show above to build your personal bucket list.")
-                : appMode === "games"
-                ? "When you finish playing a game, tap 'Mark as Played' to review and rate it!"
+                ? "Search for any movie or TV show above to build your personal bucket list."
                 : watchedCategory === "movies"
                 ? "Movies you mark as watched will be organized here."
                 : watchedCategory === "series"
@@ -2426,7 +2312,7 @@ export default function App() {
                 className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>{appMode === "games" ? "Add your first game" : "Add your first title"}</span>
+                <span>Add your first title</span>
               </button>
             ) : null}
           </div>
@@ -2506,7 +2392,6 @@ export default function App() {
               setIsBatchMode(false);
               setSelectedMovieIds([]);
             }}
-            appMode={appMode}
           />
         ) : (
           <div id="floating-navigation" className="fixed bottom-4 sm:bottom-6 left-0 right-0 flex justify-center px-4 z-40 pointer-events-none pb-[env(safe-area-inset-bottom,0px)]">
@@ -2521,14 +2406,8 @@ export default function App() {
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
                 }`}
               >
-                {appMode === "games" ? (
-                  <Gamepad2 className="w-4 h-4 shrink-0" />
-                ) : (
-                  <Film className="w-4 h-4 shrink-0" />
-                )}
-                <span className="truncate">
-                  {appMode === "games" ? "To Play" : "To Watch"} ({movies.length})
-                </span>
+                <Film className="w-4 h-4 shrink-0" />
+                <span className="truncate">To Watch ({movies.length})</span>
               </button>
 
               <button
@@ -2542,9 +2421,7 @@ export default function App() {
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span className="truncate">
-                  {appMode === "games" ? "Played" : "Watched"} ({watched.length})
-                </span>
+                <span className="truncate">Watched ({watched.length})</span>
               </button>
 
               {blendEnabled && (
@@ -2670,7 +2547,7 @@ export default function App() {
                           <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
                             <Check className="w-3.5 h-3.5" />
                             <span>
-                              {appMode === "games" ? "Played" : "Watched"} {isDetailInWatched.rating ? `(${isDetailInWatched.rating}★)` : ""}
+                              Watched {isDetailInWatched.rating ? `(${isDetailInWatched.rating}★)` : ""}
                               {isDetailInWatched.watched_date ? ` • ${isDetailInWatched.watched_date}` : ""}
                             </span>
                           </div>
@@ -2690,10 +2567,10 @@ export default function App() {
                               handleMoveToWatchlist(isDetailInWatched);
                             }}
                             className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700 px-2 py-0.5 rounded-md border border-zinc-700 transition-colors cursor-pointer"
-                            title={appMode === "games" ? "Unmark played and move back to To Play" : "Unmark watched and move back to To Watch"}
+                            title="Unmark watched and move back to To Watch"
                           >
                             <Bookmark className="w-3 h-3" />
-                            <span>{appMode === "games" ? "Undo Played" : "Undo Watched"}</span>
+                            <span>Undo Watched</span>
                           </button>
                           <button
                             type="button"
@@ -2718,7 +2595,7 @@ export default function App() {
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow-sm cursor-pointer"
                             >
                               <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                              <span>{appMode === "games" ? "Mark as Played" : "Mark as Watched"}</span>
+                              <span>Mark as Watched</span>
                             </button>
                           )}
                           <PriorityBadge
@@ -2747,7 +2624,7 @@ export default function App() {
                               setDetailMovie(null);
                             }}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 border border-zinc-800 hover:border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
-                            title={appMode === "games" ? "Remove from Backlog" : "Remove from Watchlist"}
+                            title="Remove from Watchlist"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             <span>Remove</span>
@@ -2763,7 +2640,7 @@ export default function App() {
                                 title: detailMovie.title,
                                 poster_path: detailMovie.poster_path,
                                 release_year: detailMovie.release_year,
-                                media_type: appMode === "games" ? "game" : (isItemTv(detailMovie) ? "tv" : "movie"),
+                                media_type: isItemTv(detailMovie) ? "tv" : "movie",
                                 genres: detailMovie.genres || [],
                                 platforms: detailMovie.platforms || [],
                                 overview: "overview" in detailMovie ? detailMovie.overview : detailExtra?.overview || "",
@@ -2773,7 +2650,7 @@ export default function App() {
                             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-all shadow-sm cursor-pointer active:scale-95"
                           >
                             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>{appMode === "games" ? "To Play" : "To Watch"}</span>
+                            <span>To Watch</span>
                           </button>
                           <button
                             type="button"
@@ -2783,7 +2660,7 @@ export default function App() {
                                 title: detailMovie.title,
                                 poster_path: detailMovie.poster_path,
                                 release_year: detailMovie.release_year,
-                                media_type: appMode === "games" ? "game" : (isItemTv(detailMovie) ? "tv" : "movie"),
+                                media_type: isItemTv(detailMovie) ? "tv" : "movie",
                                 genres: detailMovie.genres || [],
                                 platforms: detailMovie.platforms || [],
                                 overview: "overview" in detailMovie ? detailMovie.overview : detailExtra?.overview || "",
@@ -2793,7 +2670,7 @@ export default function App() {
                             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 text-xs font-semibold transition-all cursor-pointer active:scale-95"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>{appMode === "games" ? "Mark Played" : "Mark Watched"}</span>
+                            <span>Mark Watched</span>
                           </button>
                         </div>
                       )}
@@ -3046,7 +2923,6 @@ export default function App() {
             (tab === "towatch" && selectedPriorityFilter !== "all") ||
             (tab === "watched" && watchedCategory !== "all")
         )}
-        appMode={appMode}
       />
 
       {/* Floating Action Button (FAB) - Elevated distinct floating button above nav bar */}
@@ -3056,14 +2932,14 @@ export default function App() {
           type="button"
           onClick={() => setIsSearchDrawerOpen(true)}
           className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:right-8 z-40 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-amber-500/30 border border-amber-400/60 font-bold text-sm tracking-tight cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group animate-in fade-in duration-150 pb-[env(safe-area-inset-bottom,0px)]"
-          title={appMode === "games" ? "Search & Add Games (+)" : "Search & Add to Bucklist (+)"}
-          aria-label={appMode === "games" ? "Add Game" : "Add Movie or Series"}
+          title="Search & Add to Bucklist (+)"
+          aria-label="Add Movie or Series"
         >
           <div className="w-6 h-6 rounded-full flex items-center justify-center group-hover:rotate-90 transition-transform duration-200 shrink-0">
             <Plus className="w-5 h-5 text-zinc-950 stroke-[2.5]" />
           </div>
           <span className="font-extrabold text-xs sm:text-sm hidden sm:inline whitespace-nowrap pr-0.5">
-            {appMode === "games" ? "Add Game" : "Add Title"}
+            Add Title
           </span>
         </button>
       )}
@@ -3091,7 +2967,6 @@ export default function App() {
         onSelectMovie={(item) => {
           setDetailMovie(item);
         }}
-        appMode={appMode}
       />
 
       {/* Dedicated Universal Search Drawer / Spotlight */}
@@ -3107,7 +2982,6 @@ export default function App() {
         }}
         onToggleWatchlist={handleAddToWatchlist}
         onToggleWatched={handleAddToWatched}
-        appMode={appMode}
       />
 
       {/* Rate & Mark Watched Modal / Bottom Sheet - Highest Priority (z-[100]) Above All Drawers */}
@@ -3124,9 +2998,7 @@ export default function App() {
           >
             <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-4" />
             <h3 className="text-lg font-bold text-zinc-100">
-              {watchedModalMovie.watched
-                ? "Edit Your Rating"
-                : (appMode === "games" ? "Rate & Mark Played" : "Rate & Mark Watched")}
+              {watchedModalMovie.watched ? "Edit Your Rating" : "Rate & Mark Watched"}
             </h3>
             <p className="text-sm text-zinc-400 mt-1 mb-6 font-medium truncate">
               {watchedModalMovie.title}
@@ -3160,12 +3032,11 @@ export default function App() {
               </div>
             </div>
 
-            {/* Date & Watch Venue Row: Left: Date (Watched/Played Today) | Right: Venue (OTT / Platform / Other) */}
+            {/* Date & Watch Venue Row: Left: Date (Watched Today) | Right: Venue (OTT / Theatre / Other) */}
             <div className="flex items-center justify-center gap-2 mb-6 flex-wrap">
               <DatePickerPopover
                 value={userWatchedDate}
                 onChange={setUserWatchedDate}
-                appMode={appMode}
               />
               <WatchVenuePopover
                 venue={userWatchedVenue}
@@ -3175,7 +3046,6 @@ export default function App() {
                   setUserWatchedVenue(v);
                   setUserWatchedPlatform(p);
                 }}
-                appMode={appMode}
               />
             </div>
 

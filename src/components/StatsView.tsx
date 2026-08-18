@@ -9,9 +9,8 @@ import {
   ChevronDown,
   ChevronUp,
   BarChart2,
-  Gamepad2,
 } from "lucide-react";
-import type { WatchlistMovie, AppMode } from "../types";
+import type { WatchlistMovie } from "../types";
 import type { TvProgressMap } from "../lib/storage";
 
 interface StatsViewProps {
@@ -19,23 +18,19 @@ interface StatsViewProps {
   movies: WatchlistMovie[];
   tvProgressMap: TvProgressMap;
   onNavigateToWatchlist?: () => void;
-  appMode?: AppMode;
 }
 
 const TYPE_COLORS: Record<string, string> = {
   Movies: "#f59e0b", // Amber 500
   "TV Series": "#3b82f6", // Blue 500
   Anime: "#ec4899", // Pink 500
-  Games: "#10b981", // Emerald 500
 };
 
 export const StatsView: React.FC<StatsViewProps> = ({
   watched,
   tvProgressMap,
   onNavigateToWatchlist,
-  appMode = "cinema",
 }) => {
-  const isGames = appMode === "games";
   const [timeFilter, setTimeFilter] = useState<"all" | "year" | "month" | "week">("week");
   const [chartsExpanded, setChartsExpanded] = useState<boolean>(false);
   const [hoveredDonutIdx, setHoveredDonutIdx] = useState<number | null>(null);
@@ -99,13 +94,8 @@ export const StatsView: React.FC<StatsViewProps> = ({
     filteredWatched.forEach((item) => {
       const isAnime = isItemAnime(item);
       const isTv = isItemTv(item);
-      const isGame = item.media_type === "game" || isGames;
 
-      if (isGame) {
-        // Game playtime handling
-        const playtimeHours = item.playtime && item.playtime > 0 ? item.playtime : 20;
-        totalEstimatedMinutes += playtimeHours * 60;
-      } else if (isAnime) {
+      if (isAnime) {
         animeCount += 1;
       } else if (isTv) {
         seriesCount += 1;
@@ -113,21 +103,19 @@ export const StatsView: React.FC<StatsViewProps> = ({
         movieCount += 1;
       }
 
-      if (!isGame) {
-        if (isTv || isAnime) {
-          const progress = tvProgressMap[item.tmdb_id];
-          const epCount = progress?.watchedEpisodes?.length || 0;
-          if (epCount > 0) {
-            totalEpisodesLogged += epCount;
-            totalEstimatedMinutes += epCount * (isAnime ? 24 : 45);
-          } else {
-            const fallbackEpisodes = 10;
-            totalEpisodesLogged += fallbackEpisodes;
-            totalEstimatedMinutes += fallbackEpisodes * (isAnime ? 24 : 45);
-          }
+      if (isTv || isAnime) {
+        const progress = tvProgressMap[item.tmdb_id];
+        const epCount = progress?.watchedEpisodes?.length || 0;
+        if (epCount > 0) {
+          totalEpisodesLogged += epCount;
+          totalEstimatedMinutes += epCount * (isAnime ? 24 : 45);
         } else {
-          totalEstimatedMinutes += 110;
+          const fallbackEpisodes = 10;
+          totalEpisodesLogged += fallbackEpisodes;
+          totalEstimatedMinutes += fallbackEpisodes * (isAnime ? 24 : 45);
         }
+      } else {
+        totalEstimatedMinutes += 110;
       }
 
       if (item.rating && item.rating > 0) {
@@ -149,12 +137,12 @@ export const StatsView: React.FC<StatsViewProps> = ({
         }
       });
 
-      const venue = item.watched_source || (isGames ? "other" : "ott");
-      let venueKey = isGames ? "PC" : "OTT";
+      const venue = item.watched_source || "ott";
+      let venueKey = "OTT";
       if (venue === "theatre") {
         venueKey = "Theatre";
       } else if (venue === "other") {
-        venueKey = item.watched_platform || (isGames ? "PC" : "Other");
+        venueKey = item.watched_platform || "Other";
       } else {
         venueKey = item.watched_platform || "OTT";
       }
@@ -184,13 +172,11 @@ export const StatsView: React.FC<StatsViewProps> = ({
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    const typeDistribution = isGames
-      ? [{ name: "Games", value: filteredWatched.length, color: TYPE_COLORS.Games }].filter((t) => t.value > 0)
-      : [
-          { name: "Movies", value: movieCount, color: TYPE_COLORS.Movies },
-          { name: "TV Series", value: seriesCount, color: TYPE_COLORS["TV Series"] },
-          { name: "Anime", value: animeCount, color: TYPE_COLORS.Anime },
-        ].filter((t) => t.value > 0);
+    const typeDistribution = [
+      { name: "Movies", value: movieCount, color: TYPE_COLORS.Movies },
+      { name: "TV Series", value: seriesCount, color: TYPE_COLORS["TV Series"] },
+      { name: "Anime", value: animeCount, color: TYPE_COLORS.Anime },
+    ].filter((t) => t.value > 0);
 
     const ratingHistogram = [
       { stars: "5★", count: ratingDist[5], color: "#10b981" },
@@ -214,22 +200,18 @@ export const StatsView: React.FC<StatsViewProps> = ({
       typeDistribution,
       ratingHistogram,
     };
-  }, [filteredWatched, tvProgressMap, isGames]);
+  }, [filteredWatched, tvProgressMap]);
 
   if (watched.length === 0) {
     return (
       <div id="stats-empty-state" className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 text-center max-w-sm mx-auto my-2 space-y-2.5 shadow-lg">
         <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
-          {isGames ? <Gamepad2 className="w-4 h-4" /> : <Award className="w-4 h-4" />}
+          <Award className="w-4 h-4" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-sm font-bold text-zinc-100">
-            {isGames ? "No Played Games Yet" : "No Watched History Yet"}
-          </h3>
+          <h3 className="text-sm font-bold text-zinc-100">No Watched History Yet</h3>
           <p className="text-[11px] text-zinc-400 leading-relaxed">
-            {isGames
-              ? "Mark games as played from your backlog to unlock gaming stats."
-              : "Mark movies and series as watched to unlock viewing stats."}
+            Mark movies and series as watched to unlock viewing stats.
           </p>
         </div>
         {onNavigateToWatchlist && (
@@ -238,8 +220,8 @@ export const StatsView: React.FC<StatsViewProps> = ({
             onClick={onNavigateToWatchlist}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-xs transition-all cursor-pointer"
           >
-            {isGames ? <Gamepad2 className="w-3 h-3" /> : <Film className="w-3 h-3" />}
-            <span>{isGames ? "Go to Backlog" : "Go to Watchlist"}</span>
+            <Film className="w-3 h-3" />
+            <span>Go to Watchlist</span>
           </button>
         )}
       </div>
@@ -257,11 +239,11 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
   return (
     <div id="stats-dashboard" className="w-full space-y-2.5 animate-in fade-in duration-200">
-      {/* Streamlined Watch/Play Time Hero Banner */}
+      {/* Streamlined Watch Time Hero Banner */}
       <div className="bg-gradient-to-r from-zinc-900 via-[#18181b] to-zinc-900 border border-zinc-800/90 rounded-2xl p-3 sm:p-3.5 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
-            {isGames ? <Gamepad2 className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+            <Clock className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-baseline gap-2">
@@ -269,18 +251,18 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 {statsSummary.totalHours}
               </span>
               <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                {isGames ? "Hours Played" : "Hours Watched"}
+                Hours Watched
               </span>
               <span className="text-[11px] text-zinc-400 font-medium hidden sm:inline">
                 (~{(statsSummary.totalHours / 24).toFixed(1)} days)
               </span>
             </div>
             <p className="text-[11px] text-zinc-400 mt-0.5">
-              Across <span className="text-zinc-200 font-semibold">{statsSummary.totalWatchedCount} {isGames ? "games" : "titles"}</span>
-              {!isGames && statsSummary.movieCount > 0 && ` (${statsSummary.movieCount} movies`}
-              {!isGames && statsSummary.seriesCount > 0 && `, ${statsSummary.seriesCount} shows`}
-              {!isGames && statsSummary.animeCount > 0 && `, ${statsSummary.animeCount} anime`}
-              {!isGames && ")"}
+              Across <span className="text-zinc-200 font-semibold">{statsSummary.totalWatchedCount} titles</span>
+              {statsSummary.movieCount > 0 && ` (${statsSummary.movieCount} movies`}
+              {statsSummary.seriesCount > 0 && `, ${statsSummary.seriesCount} shows`}
+              {statsSummary.animeCount > 0 && `, ${statsSummary.animeCount} anime`}
+              {")"}
               {statsSummary.avgRating !== "—" && (
                 <> • <span className="text-amber-400 font-semibold">{statsSummary.avgRating}★ avg</span></>
               )}

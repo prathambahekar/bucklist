@@ -11,17 +11,9 @@ import {
   Check,
   Sparkles,
   ArrowRight,
-  Gamepad2,
 } from "lucide-react";
-import type { SearchResult, WatchlistMovie, AppMode } from "../types";
-import {
-  searchMovies,
-  getPosterUrl,
-  handleImageError,
-  DEFAULT_POSTER_FALLBACK,
-  DEFAULT_GAME_POSTER_FALLBACK,
-} from "../lib/api";
-import { searchGames } from "../lib/rawgApi";
+import type { SearchResult, WatchlistMovie } from "../types";
+import { searchMovies, getPosterUrl } from "../lib/api";
 import { OttBadge } from "./OttBadge";
 
 interface UniversalSearchDrawerProps {
@@ -34,7 +26,6 @@ interface UniversalSearchDrawerProps {
   onToggleWatched?: (item: SearchResult) => Promise<void> | void;
   existingWatchlistIds: Set<number>;
   existingWatchedIds: Set<number>;
-  appMode?: AppMode;
 }
 
 type SearchFilterScope = "all" | "library" | "movies" | "tv";
@@ -47,9 +38,7 @@ export function UniversalSearchDrawer({
   onSelectMovie,
   existingWatchlistIds,
   existingWatchedIds,
-  appMode = "cinema",
 }: UniversalSearchDrawerProps) {
-  const isGames = appMode === "games";
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchFilterScope>("all");
   const [tmdbResults, setTmdbResults] = useState<SearchResult[]>([]);
@@ -98,16 +87,14 @@ export function UniversalSearchDrawer({
       );
       const yearMatch = (item.release_year || "").includes(trimmed);
 
-      if (!isGames) {
-        if (scope === "movies" && item.media_type === "tv") return false;
-        if (scope === "tv" && item.media_type !== "tv") return false;
-      }
+      if (scope === "movies" && item.media_type === "tv") return false;
+      if (scope === "tv" && item.media_type !== "tv") return false;
 
       return titleMatch || genreMatch || yearMatch;
     });
-  }, [query, movies, watched, scope, isGames]);
+  }, [query, movies, watched, scope]);
 
-  // Live search with debouncing (RAWG in games mode, TMDB in cinema mode)
+  // TMDB live search with debouncing
   useEffect(() => {
     const trimmed = query.trim();
     if (debounceTimerRef.current) {
@@ -122,17 +109,13 @@ export function UniversalSearchDrawer({
 
     setIsLoading(true);
     debounceTimerRef.current = window.setTimeout(() => {
-      const searchFn = isGames ? searchGames(trimmed) : searchMovies(trimmed);
-
-      searchFn
+      searchMovies(trimmed)
         .then((res) => {
           let filtered = res;
-          if (!isGames) {
-            if (scope === "movies") {
-              filtered = res.filter((item) => item.media_type !== "tv");
-            } else if (scope === "tv") {
-              filtered = res.filter((item) => item.media_type === "tv");
-            }
+          if (scope === "movies") {
+            filtered = res.filter((item) => item.media_type !== "tv");
+          } else if (scope === "tv") {
+            filtered = res.filter((item) => item.media_type === "tv");
           }
           setTmdbResults(filtered);
         })
@@ -150,7 +133,7 @@ export function UniversalSearchDrawer({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [query, scope, isGames]);
+  }, [query, scope]);
 
   if (!isOpen) return null;
 
@@ -162,15 +145,10 @@ export function UniversalSearchDrawer({
   const hasQuery = query.trim().length > 0;
   const libraryIds = new Set(libraryMatches.map((m) => m.item.tmdb_id));
 
-  // Filter out results that are already shown in library matches to avoid duplicates
+  // Filter out TMDB results that are already shown in library matches to avoid duplicates
   const filteredTmdbResults = tmdbResults.filter(
     (item) => !libraryIds.has(item.tmdb_id)
   );
-
-  const resolvePoster = (posterPath?: string | null) => {
-    if (!posterPath) return null;
-    return getPosterUrl(posterPath);
-  };
 
   return (
     <div
@@ -198,7 +176,7 @@ export function UniversalSearchDrawer({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={isGames ? "Search games, genres, or platforms..." : "Search library, movies, series, or genres..."}
+              placeholder="Search library, movies, series, or genres..."
               className="w-full bg-transparent text-sm sm:text-base text-zinc-100 placeholder-zinc-500 focus:outline-none font-medium"
               autoComplete="off"
               spellCheck="false"
@@ -233,23 +211,19 @@ export function UniversalSearchDrawer({
 
           {/* Minimal Scope Filter Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {(isGames
-              ? [
-                  { id: "all", label: "All" },
-                  { id: "library", label: "In My Backlog" },
-                ]
-              : [
-                  { id: "all", label: "All" },
-                  { id: "library", label: "In My Library" },
-                  { id: "movies", label: "Movies" },
-                  { id: "tv", label: "TV Series" },
-                ]
+            {(
+              [
+                { id: "all", label: "All" },
+                { id: "library", label: "In My Library" },
+                { id: "movies", label: "Movies" },
+                { id: "tv", label: "TV Series" },
+              ] as const
             ).map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 id={`search-scope-${tab.id}`}
-                onClick={() => setScope(tab.id as SearchFilterScope)}
+                onClick={() => setScope(tab.id)}
                 className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   scope === tab.id
                     ? "bg-amber-500 text-zinc-950 shadow-xs"
@@ -267,13 +241,13 @@ export function UniversalSearchDrawer({
           {/* STATE 1: Empty Query - Quick Access Sections */}
           {!hasQuery && (
             <div className="space-y-4 pb-4">
-              {/* Recently added to watchlist / backlog */}
+              {/* Recently added to watchlist */}
               {movies.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between px-1">
                     <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                       <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-                      {isGames ? "In Your Backlog" : "In Your Watchlist"}
+                      In Your Watchlist
                     </span>
                     <span className="text-[11px] text-zinc-500 font-medium">
                       {movies.length} saved
@@ -281,7 +255,7 @@ export function UniversalSearchDrawer({
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {movies.slice(0, 4).map((movie) => {
-                      const poster = resolvePoster(movie.poster_path);
+                      const poster = getPosterUrl(movie.poster_path);
                       return (
                         <button
                           key={movie.id}
@@ -296,19 +270,10 @@ export function UniversalSearchDrawer({
                                 alt={movie.title}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
-                                referrerPolicy="no-referrer"
-                                onError={(e) =>
-                                  handleImageError(
-                                    e,
-                                    isGames
-                                      ? DEFAULT_GAME_POSTER_FALLBACK
-                                      : DEFAULT_POSTER_FALLBACK
-                                  )
-                                }
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                                {isGames ? <Gamepad2 className="w-4 h-4" /> : <Film className="w-4 h-4" />}
+                                <Film className="w-4 h-4" />
                               </div>
                             )}
                           </div>
@@ -318,17 +283,8 @@ export function UniversalSearchDrawer({
                             </h4>
                             <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-0.5">
                               <span>{movie.release_year || "—"}</span>
-                              {movie.metacritic ? (
-                                <>
-                                  <span>•</span>
-                                  <span className="text-emerald-400 font-semibold">{movie.metacritic} Metascore</span>
-                                </>
-                              ) : !isGames ? (
-                                <>
-                                  <span>•</span>
-                                  <span className="capitalize">{movie.media_type === "tv" ? "TV" : "Movie"}</span>
-                                </>
-                              ) : null}
+                              <span>•</span>
+                              <span className="capitalize">{movie.media_type === "tv" ? "TV" : "Movie"}</span>
                             </div>
                           </div>
                           <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0 mr-1" />
@@ -339,13 +295,13 @@ export function UniversalSearchDrawer({
                 </div>
               )}
 
-              {/* Recently watched / played */}
+              {/* Recently watched */}
               {watched.length > 0 && (
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between px-1">
                     <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      {isGames ? "Recently Played" : "Recently Watched"}
+                      Recently Watched
                     </span>
                     <span className="text-[11px] text-zinc-500 font-medium">
                       {watched.length} completed
@@ -353,7 +309,7 @@ export function UniversalSearchDrawer({
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {watched.slice(0, 4).map((movie) => {
-                      const poster = resolvePoster(movie.poster_path);
+                      const poster = getPosterUrl(movie.poster_path);
                       return (
                         <button
                           key={movie.id}
@@ -368,19 +324,10 @@ export function UniversalSearchDrawer({
                                 alt={movie.title}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
-                                referrerPolicy="no-referrer"
-                                onError={(e) =>
-                                  handleImageError(
-                                    e,
-                                    isGames
-                                      ? DEFAULT_GAME_POSTER_FALLBACK
-                                      : DEFAULT_POSTER_FALLBACK
-                                  )
-                                }
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                                {isGames ? <Gamepad2 className="w-4 h-4" /> : <Film className="w-4 h-4" />}
+                                <Film className="w-4 h-4" />
                               </div>
                             )}
                           </div>
@@ -395,7 +342,7 @@ export function UniversalSearchDrawer({
                                   {movie.rating}
                                 </span>
                               ) : (
-                                <span>{isGames ? "Played" : "Watched"}</span>
+                                <span>Watched</span>
                               )}
                               <span>•</span>
                               <span>{movie.release_year || "—"}</span>
@@ -411,9 +358,7 @@ export function UniversalSearchDrawer({
 
               {movies.length === 0 && watched.length === 0 && (
                 <div className="text-center py-12 text-zinc-500 text-xs">
-                  {isGames
-                    ? "Type any title to instantly search video games via RAWG"
-                    : "Type any title name to instantly search across movies & TV series"}
+                  Type any title name to instantly search across movies & TV series
                 </div>
               )}
             </div>
@@ -428,12 +373,12 @@ export function UniversalSearchDrawer({
                   <div className="flex items-center justify-between px-1">
                     <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                       <Bookmark className="w-3.5 h-3.5" />
-                      In Your {isGames ? "Backlog" : "Library"} ({libraryMatches.length})
+                      In Your Library ({libraryMatches.length})
                     </span>
                   </div>
                   <div className="space-y-1.5">
                     {libraryMatches.map(({ item, status }) => {
-                      const poster = resolvePoster(item.poster_path);
+                      const poster = getPosterUrl(item.poster_path);
                       return (
                         <div
                           key={item.id}
@@ -448,19 +393,10 @@ export function UniversalSearchDrawer({
                                   alt={item.title}
                                   className="w-full h-full object-cover"
                                   loading="lazy"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) =>
-                                    handleImageError(
-                                      e,
-                                      isGames
-                                        ? DEFAULT_GAME_POSTER_FALLBACK
-                                        : DEFAULT_POSTER_FALLBACK
-                                    )
-                                  }
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                                  {isGames ? <Gamepad2 className="w-4 h-4" /> : <Film className="w-4 h-4" />}
+                                  <Film className="w-4 h-4" />
                                 </div>
                               )}
                             </div>
@@ -471,28 +407,19 @@ export function UniversalSearchDrawer({
                                 </h4>
                                 {status === "watchlist" ? (
                                   <span className="text-[10px] bg-amber-400/15 text-amber-400 font-semibold px-2 py-0.5 rounded-full shrink-0">
-                                    {isGames ? "To-Play" : "To-Watch"}
+                                    To-Watch
                                   </span>
                                 ) : (
                                   <span className="text-[10px] bg-emerald-400/15 text-emerald-400 font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1">
                                     <Check className="w-2.5 h-2.5 stroke-[2.5]" />
-                                    {isGames ? "Played" : "Watched"} {item.rating ? `★${item.rating}` : ""}
+                                    Watched {item.rating ? `★${item.rating}` : ""}
                                   </span>
                                 )}
                               </div>
                               <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-1 flex-wrap">
                                 <span>{item.release_year || "—"}</span>
-                                {item.metacritic ? (
-                                  <>
-                                    <span>•</span>
-                                    <span className="text-emerald-400 font-medium">{item.metacritic} Metascore</span>
-                                  </>
-                                ) : !isGames ? (
-                                  <>
-                                    <span>•</span>
-                                    <span className="capitalize">{item.media_type === "tv" ? "TV Series" : "Movie"}</span>
-                                  </>
-                                ) : null}
+                                <span>•</span>
+                                <span className="capitalize">{item.media_type === "tv" ? "TV Series" : "Movie"}</span>
                                 {item.genres && item.genres.length > 0 && (
                                   <>
                                     <span>•</span>
@@ -520,14 +447,14 @@ export function UniversalSearchDrawer({
                 </div>
               )}
 
-              {/* Global Search Results */}
+              {/* Global TMDB Search Results */}
               {scope !== "library" && (
                 <div className="space-y-2 pt-1">
                   {filteredTmdbResults.length > 0 && (
                     <div className="flex items-center justify-between px-1">
                       <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
-                        {isGames ? `Explore Games (${filteredTmdbResults.length})` : `Explore Titles (${filteredTmdbResults.length})`}
+                        Explore Titles ({filteredTmdbResults.length})
                       </span>
                     </div>
                   )}
@@ -535,13 +462,13 @@ export function UniversalSearchDrawer({
                   {isLoading && filteredTmdbResults.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-10 text-zinc-500 gap-2">
                       <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
-                      <span className="text-xs">{isGames ? "Searching games..." : "Searching titles..."}</span>
+                      <span className="text-xs">Searching titles...</span>
                     </div>
                   )}
 
                   {!isLoading && filteredTmdbResults.length === 0 && libraryMatches.length === 0 && (
                     <div className="text-center py-12 text-zinc-500 text-xs">
-                      No matching {isGames ? "games" : "titles"} found for &quot;{query}&quot;
+                      No matching titles found for &quot;{query}&quot;
                     </div>
                   )}
 
@@ -549,7 +476,7 @@ export function UniversalSearchDrawer({
                     {filteredTmdbResults.map((item) => {
                       const inWatchlist = existingWatchlistIds.has(item.tmdb_id);
                       const inWatched = existingWatchedIds.has(item.tmdb_id);
-                      const poster = resolvePoster(item.poster_path);
+                      const poster = getPosterUrl(item.poster_path);
 
                       return (
                         <div
@@ -565,21 +492,10 @@ export function UniversalSearchDrawer({
                                   alt={item.title}
                                   className="w-full h-full object-cover"
                                   loading="lazy"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) =>
-                                    handleImageError(
-                                      e,
-                                      isGames
-                                        ? DEFAULT_GAME_POSTER_FALLBACK
-                                        : DEFAULT_POSTER_FALLBACK
-                                    )
-                                  }
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                                  {isGames ? (
-                                    <Gamepad2 className="w-4 h-4" />
-                                  ) : item.media_type === "tv" ? (
+                                  {item.media_type === "tv" ? (
                                     <Tv className="w-4 h-4" />
                                   ) : (
                                     <Film className="w-4 h-4" />
@@ -593,17 +509,8 @@ export function UniversalSearchDrawer({
                               </h4>
                               <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-0.5 flex-wrap">
                                 <span>{item.release_year || "—"}</span>
-                                {item.metacritic ? (
-                                  <>
-                                    <span>•</span>
-                                    <span className="text-emerald-400 font-semibold">{item.metacritic} Metascore</span>
-                                  </>
-                                ) : !isGames ? (
-                                  <>
-                                    <span>•</span>
-                                    <span className="capitalize">{item.media_type === "tv" ? "TV Series" : "Movie"}</span>
-                                  </>
-                                ) : null}
+                                <span>•</span>
+                                <span className="capitalize">{item.media_type === "tv" ? "TV Series" : "Movie"}</span>
                               </div>
                               {item.platforms && item.platforms.length > 0 && (
                                 <div className="flex items-center gap-1 mt-1.5 flex-wrap">
@@ -618,12 +525,12 @@ export function UniversalSearchDrawer({
                           <div className="flex items-center gap-2 shrink-0">
                             {inWatchlist && (
                               <span className="text-[10px] font-semibold text-amber-400 px-2 py-0.5 bg-amber-400/10 rounded-full">
-                                {isGames ? "In Backlog" : "In List"}
+                                In List
                               </span>
                             )}
                             {inWatched && (
                               <span className="text-[10px] font-semibold text-emerald-400 px-2 py-0.5 bg-emerald-400/10 rounded-full">
-                                {isGames ? "Played" : "Watched"}
+                                Watched
                               </span>
                             )}
                             <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors" />
@@ -641,4 +548,3 @@ export function UniversalSearchDrawer({
     </div>
   );
 }
-

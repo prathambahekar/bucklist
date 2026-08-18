@@ -34,7 +34,11 @@ import {
   addMovieToBlend,
   deleteBlend,
 } from "../lib/blend";
-import { getPosterUrl } from "../lib/api";
+import {
+  getPosterUrl,
+  handleImageError,
+  DEFAULT_POSTER_FALLBACK,
+} from "../lib/api";
 import { OttBadge } from "./OttBadge";
 import { CreateJoinBlendModal } from "./CreateJoinBlendModal";
 import { BlendShareModal } from "./BlendShareModal";
@@ -567,6 +571,9 @@ export function BlendView({
                           alt={movie.title}
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
+                          onError={(e) =>
+                            handleImageError(e, DEFAULT_POSTER_FALLBACK)
+                          }
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-zinc-700">

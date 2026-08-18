@@ -84,12 +84,34 @@ export function normalizePriority(raw?: any): PriorityLevel {
   return "wanna_see";
 }
 
-export function getPriorityConfig(priority?: PriorityLevel | string | null): PriorityConfig {
-  const norm = normalizePriority(priority);
-  return PRIORITY_CONFIGS[norm] || PRIORITY_CONFIGS.wanna_see;
-}
-
 export type AppMode = "cinema" | "games";
+
+export function getPriorityConfig(
+  priority?: PriorityLevel | string | null,
+  mode: AppMode = "cinema"
+): PriorityConfig {
+  const norm = normalizePriority(priority);
+  const base = PRIORITY_CONFIGS[norm] || PRIORITY_CONFIGS.wanna_see;
+  if (mode === "games") {
+    if (norm === "must_watch") {
+      return {
+        ...base,
+        label: "Must Play",
+        shortLabel: "Must Play",
+        description: "Highest priority • Play next",
+      };
+    }
+    if (norm === "wanna_see") {
+      return {
+        ...base,
+        label: "Wanna Play",
+        shortLabel: "Wanna Play",
+        description: "Standard backlog item",
+      };
+    }
+  }
+  return base;
+}
 
 export interface WatchlistMovie {
   id: string;
@@ -229,7 +251,7 @@ export interface BlendMovie {
   poster_path: string | null;
   backdrop_path?: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv";
+  media_type?: "movie" | "tv" | "game";
   genres: string[];
   platforms: string[];
   runtime?: string;
@@ -291,6 +313,7 @@ export interface BucklistBackupData {
   appName?: string;
   exportedAt: string;
   watchlist: WatchlistMovie[];
+  gameWatchlist?: WatchlistMovie[];
   collections?: MovieCollection[];
   blends?: Blend[];
   tvProgress?: Record<
@@ -307,6 +330,7 @@ export interface BucklistBackupData {
     watchedViewMode?: WatchedViewMode;
     watchedCategory?: "all" | "movies" | "series" | "anime";
     timelinePeriod?: TimelinePeriod;
+    appMode?: AppMode;
   };
   stats?: {
     totalItems: number;

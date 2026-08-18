@@ -5,6 +5,7 @@ import {
   CalendarRange,
   Film,
   Tv,
+  Gamepad2,
   Sparkles,
   Star,
   Trash2,
@@ -13,9 +14,14 @@ import {
   ChevronDown,
   ChevronsUpDown,
 } from "lucide-react";
-import type { WatchlistMovie, TimelinePeriod } from "../types";
+import type { WatchlistMovie, TimelinePeriod, AppMode } from "../types";
 import type { TvProgressMap } from "../lib/storage";
-import { getPosterUrl } from "../lib/api";
+import {
+  getPosterUrl,
+  handleImageError,
+  DEFAULT_POSTER_FALLBACK,
+  DEFAULT_GAME_POSTER_FALLBACK,
+} from "../lib/api";
 import { OttBadge } from "./OttBadge";
 import { DatePickerPopover } from "./DatePickerPopover";
 
@@ -37,6 +43,7 @@ interface WatchedTimelineViewProps {
   onUpdateWatchedDate: (item: WatchlistMovie, newDate: string) => void;
   onOpenTvDrawer: (item: WatchlistMovie) => void;
   tvProgressMap: TvProgressMap;
+  appMode?: AppMode;
 }
 
 interface TimelineGroup {
@@ -91,6 +98,7 @@ export function WatchedTimelineView({
   onUpdateWatchedDate,
   onOpenTvDrawer,
   tvProgressMap,
+  appMode = "cinema",
 }: WatchedTimelineViewProps) {
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -364,9 +372,10 @@ export function WatchedTimelineView({
               {!isCollapsed && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in duration-150">
                   {group.items.map((item) => {
+                    const isGame = item.media_type === "game" || appMode === "games";
                     const poster = getPosterUrl(item.poster_path);
-                    const isTv = item.media_type === "tv";
-                    const isAnime = checkIsAnime(item);
+                    const isTv = !isGame && item.media_type === "tv";
+                    const isAnime = !isGame && checkIsAnime(item);
                     const progressData = tvProgressMap[item.tmdb_id];
                     const watchedEpCount = progressData?.watchedEpisodes?.length || 0;
                     const totalEpCount = progressData?.totalEpisodes;
@@ -384,11 +393,21 @@ export function WatchedTimelineView({
                           <img
                             src={
                               poster ||
-                              "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
+                              (isGame
+                                ? DEFAULT_GAME_POSTER_FALLBACK
+                                : DEFAULT_POSTER_FALLBACK)
                             }
                             alt={item.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                             referrerPolicy="no-referrer"
+                            onError={(e) =>
+                              handleImageError(
+                                e,
+                                isGame
+                                  ? DEFAULT_GAME_POSTER_FALLBACK
+                                  : DEFAULT_POSTER_FALLBACK
+                              )
+                            }
                           />
                         </div>
 
@@ -421,7 +440,12 @@ export function WatchedTimelineView({
                             {/* Row 2: Metadata (Media Type, Year, OTT Platforms) */}
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap text-xs text-zinc-400">
                               <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 font-semibold text-[10px]">
-                                {isAnime ? (
+                                {isGame ? (
+                                  <>
+                                    <Gamepad2 className="w-2.5 h-2.5 text-emerald-400" />
+                                    <span className="text-emerald-300">Game</span>
+                                  </>
+                                ) : isAnime ? (
                                   <>
                                     <Sparkles className="w-2.5 h-2.5 text-amber-400" />
                                     <span>Anime</span>
@@ -563,9 +587,10 @@ export function WatchedTimelineView({
               {!isCollapsed && (
                 <div className="space-y-2 animate-in fade-in duration-150">
                   {group.items.map((item) => {
+                    const isGame = item.media_type === "game" || appMode === "games";
                     const poster = getPosterUrl(item.poster_path);
-                    const isTv = item.media_type === "tv";
-                    const isAnime = checkIsAnime(item);
+                    const isTv = !isGame && item.media_type === "tv";
+                    const isAnime = !isGame && checkIsAnime(item);
                     const progressData = tvProgressMap[item.tmdb_id];
                     const watchedEpCount = progressData?.watchedEpisodes?.length || 0;
                     const totalEpCount = progressData?.totalEpisodes;
@@ -584,11 +609,21 @@ export function WatchedTimelineView({
                           <img
                             src={
                               poster ||
-                              "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
+                              (isGame
+                                ? DEFAULT_GAME_POSTER_FALLBACK
+                                : DEFAULT_POSTER_FALLBACK)
                             }
                             alt={item.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                             referrerPolicy="no-referrer"
+                            onError={(e) =>
+                              handleImageError(
+                                e,
+                                isGame
+                                  ? DEFAULT_GAME_POSTER_FALLBACK
+                                  : DEFAULT_POSTER_FALLBACK
+                              )
+                            }
                           />
                         </div>
 
@@ -619,7 +654,12 @@ export function WatchedTimelineView({
 
                           {/* Row 2: Metadata (Media Type, Year, OTT Badge, Episode tracker) */}
                           <div className="flex items-center gap-1.5 text-xs flex-wrap">
-                            {isAnime ? (
+                            {isGame ? (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shrink-0 flex items-center gap-0.5">
+                                <Gamepad2 className="w-2.5 h-2.5" />
+                                <span>Game</span>
+                              </span>
+                            ) : isAnime ? (
                               <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0 flex items-center gap-0.5">
                                 <Sparkles className="w-2.5 h-2.5" />
                                 <span>Anime</span>

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import {
   type PriorityLevel,
-  PRIORITY_CONFIGS,
+  type AppMode,
   PRIORITY_ORDER,
   getPriorityConfig,
 } from "../types";
@@ -16,6 +16,7 @@ interface PriorityBadgeProps {
   showDropdownArrow?: boolean;
   showFullLabel?: boolean;
   showDot?: boolean;
+  appMode?: AppMode;
 }
 
 export function PriorityBadge({
@@ -27,11 +28,12 @@ export function PriorityBadge({
   showDropdownArrow = false,
   showFullLabel = true,
   showDot = false,
+  appMode = "cinema",
 }: PriorityBadgeProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const currentConfig = getPriorityConfig(priority);
+  const currentConfig = getPriorityConfig(priority, appMode);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -107,7 +109,7 @@ export function PriorityBadge({
 
           <div className="space-y-0.5">
             {PRIORITY_ORDER.map((levelKey) => {
-              const cfg = PRIORITY_CONFIGS[levelKey];
+              const cfg = getPriorityConfig(levelKey, appMode);
               const isSelected = (priority || "wanna_see") === levelKey;
 
               return (

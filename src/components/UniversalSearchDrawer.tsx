@@ -14,7 +14,13 @@ import {
   Gamepad2,
 } from "lucide-react";
 import type { SearchResult, WatchlistMovie, AppMode } from "../types";
-import { searchMovies, getPosterUrl } from "../lib/api";
+import {
+  searchMovies,
+  getPosterUrl,
+  handleImageError,
+  DEFAULT_POSTER_FALLBACK,
+  DEFAULT_GAME_POSTER_FALLBACK,
+} from "../lib/api";
 import { searchGames } from "../lib/rawgApi";
 import { OttBadge } from "./OttBadge";
 
@@ -163,7 +169,6 @@ export function UniversalSearchDrawer({
 
   const resolvePoster = (posterPath?: string | null) => {
     if (!posterPath) return null;
-    if (posterPath.startsWith("http")) return posterPath;
     return getPosterUrl(posterPath);
   };
 
@@ -291,6 +296,15 @@ export function UniversalSearchDrawer({
                                 alt={movie.title}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) =>
+                                  handleImageError(
+                                    e,
+                                    isGames
+                                      ? DEFAULT_GAME_POSTER_FALLBACK
+                                      : DEFAULT_POSTER_FALLBACK
+                                  )
+                                }
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-600">
@@ -354,6 +368,15 @@ export function UniversalSearchDrawer({
                                 alt={movie.title}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) =>
+                                  handleImageError(
+                                    e,
+                                    isGames
+                                      ? DEFAULT_GAME_POSTER_FALLBACK
+                                      : DEFAULT_POSTER_FALLBACK
+                                  )
+                                }
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-600">
@@ -425,6 +448,15 @@ export function UniversalSearchDrawer({
                                   alt={item.title}
                                   className="w-full h-full object-cover"
                                   loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) =>
+                                    handleImageError(
+                                      e,
+                                      isGames
+                                        ? DEFAULT_GAME_POSTER_FALLBACK
+                                        : DEFAULT_POSTER_FALLBACK
+                                    )
+                                  }
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-zinc-600">
@@ -533,6 +565,15 @@ export function UniversalSearchDrawer({
                                   alt={item.title}
                                   className="w-full h-full object-cover"
                                   loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) =>
+                                    handleImageError(
+                                      e,
+                                      isGames
+                                        ? DEFAULT_GAME_POSTER_FALLBACK
+                                        : DEFAULT_POSTER_FALLBACK
+                                    )
+                                  }
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-zinc-600">

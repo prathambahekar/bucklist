@@ -19,7 +19,14 @@ import {
   Crown,
 } from "lucide-react";
 import type { SearchResult, AppMode } from "../types";
-import { searchMovies, fetchCategorySuggestions, getPosterUrl } from "../lib/api";
+import {
+  searchMovies,
+  fetchCategorySuggestions,
+  getPosterUrl,
+  handleImageError,
+  DEFAULT_POSTER_FALLBACK,
+  DEFAULT_GAME_POSTER_FALLBACK,
+} from "../lib/api";
 import { searchGames, fetchGameCategorySuggestions } from "../lib/rawgApi";
 import { OttBadge } from "./OttBadge";
 
@@ -220,14 +227,14 @@ export function SearchAddDrawer({
 
   const currentLoading = isSearching ? loading : suggestionsLoading;
 
-  const resolveItemImage = (posterPath: string | null) => {
+  const resolveItemImage = (posterPath: string | null): string => {
     if (!posterPath) {
-      return "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=200&auto=format&fit=crop&q=60";
+      return isGames ? DEFAULT_GAME_POSTER_FALLBACK : DEFAULT_POSTER_FALLBACK;
     }
-    if (posterPath.startsWith("http://") || posterPath.startsWith("https://")) {
-      return posterPath;
-    }
-    return getPosterUrl(posterPath);
+    return (
+      getPosterUrl(posterPath) ||
+      (isGames ? DEFAULT_GAME_POSTER_FALLBACK : DEFAULT_POSTER_FALLBACK)
+    );
   };
 
   return (
@@ -569,6 +576,14 @@ export function SearchAddDrawer({
                       alt={item.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       referrerPolicy="no-referrer"
+                      onError={(e) =>
+                        handleImageError(
+                          e,
+                          isGames
+                            ? DEFAULT_GAME_POSTER_FALLBACK
+                            : DEFAULT_POSTER_FALLBACK
+                        )
+                      }
                     />
                     {item.metacritic && (
                       <div className="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-black/80 text-[9px] font-bold text-emerald-400 border border-emerald-500/40">

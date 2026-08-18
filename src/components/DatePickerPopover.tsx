@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import type { AppMode } from "../types";
 
 interface DatePickerPopoverProps {
   value: string; // YYYY-MM-DD
   onChange: (val: string) => void;
   maxDate?: string; // YYYY-MM-DD
   compact?: boolean;
+  appMode?: AppMode;
 }
 
 function getTodayString(): string {
@@ -30,9 +32,11 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
   onChange,
   maxDate = getTodayString(),
   compact = false,
+  appMode = "cinema",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const actionPrefix = appMode === "games" ? "Played" : "Watched";
 
   // Parse current value or fallback to today
   const selectedDate = value || getTodayString();
@@ -112,10 +116,10 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
   // Format label for button
   const getButtonLabel = () => {
     if (value === todayStr) {
-      return compact ? "Today" : "Watched Today";
+      return compact ? "Today" : `${actionPrefix} Today`;
     }
     if (value === yesterdayStr) {
-      return compact ? "Yesterday" : "Watched Yesterday";
+      return compact ? "Yesterday" : `${actionPrefix} Yesterday`;
     }
     try {
       const [y, m, d] = value.split("-").map(Number);
@@ -124,12 +128,12 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
         if (compact) {
           return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
         }
-        return `Watched ${dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+        return `${actionPrefix} ${dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
       }
     } catch {
       // fallback
     }
-    return compact ? value : `Watched ${value}`;
+    return compact ? value : `${actionPrefix} ${value}`;
   };
 
   return (

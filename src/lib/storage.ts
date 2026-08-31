@@ -3,6 +3,7 @@ import {
   type BucklistBackupData,
   type ImportValidationResult,
   type MovieCollection,
+  type AppMode,
   normalizePriority,
 } from "../types";
 import { normalizePlatformsList } from "./api";
@@ -11,7 +12,86 @@ import { Share } from "@capacitor/share";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 
 const LOCAL_STORAGE_KEY = "bucklist_local_watchlist_v1";
+const GAMES_STORAGE_KEY = "bucklist_local_games_watchlist_v1";
+const APP_MODE_KEY = "bucklist_active_app_mode_v1";
 const TV_PROGRESS_KEY = "bucklist_tv_progress_v1";
+
+const STARTER_GAME_IDS = new Set(["game_3272", "game_3328", "game_58175", "game_4200"]);
+
+export function getLocalAppMode(): AppMode {
+  try {
+    const raw = localStorage.getItem(APP_MODE_KEY);
+    if (raw === "gaming" || raw === "cinema") {
+      return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return "cinema";
+}
+
+export function saveLocalAppMode(mode: AppMode): void {
+  try {
+    localStorage.setItem(APP_MODE_KEY, mode);
+  } catch {
+    // ignore
+  }
+}
+
+function sanitizePosterPath(posterPath?: string | null): string | null {
+  if (!posterPath) return null;
+  let clean = posterPath.trim();
+  if (clean.includes("https://image.tmdb.org/t/p/w342http")) {
+    clean = clean.replace("https://image.tmdb.org/t/p/w342", "");
+  }
+  if (clean.includes("http://image.tmdb.org/t/p/w342http")) {
+    clean = clean.replace("http://image.tmdb.org/t/p/w342", "");
+  }
+  return clean;
+}
+
+export function getLocalGamesWatchlist(): WatchlistMovie[] {
+  try {
+    const raw = localStorage.getItem(GAMES_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const list: WatchlistMovie[] = JSON.parse(raw);
+    // Filter out any previously auto-seeded starter games
+    const cleaned = list.filter((m) => !STARTER_GAME_IDS.has(m.id));
+    if (cleaned.length !== list.length) {
+      saveLocalGamesWatchlist(cleaned);
+    }
+    return cleaned.map((m) => ({
+      ...m,
+      poster_path: sanitizePosterPath(m.poster_path),
+      priority: normalizePriority(m.priority),
+      platforms: m.platforms || [],
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalGamesWatchlist(items: WatchlistMovie[]): void {
+  try {
+    localStorage.setItem(GAMES_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // ignore
+  }
+}
+
+export function getLocalWatchlistForMode(mode: AppMode): WatchlistMovie[] {
+  return mode === "gaming" ? getLocalGamesWatchlist() : getLocalWatchlist();
+}
+
+export function saveLocalWatchlistForMode(mode: AppMode, items: WatchlistMovie[]): void {
+  if (mode === "gaming") {
+    saveLocalGamesWatchlist(items);
+  } else {
+    saveLocalWatchlist(items);
+  }
+}
 
 export interface TvProgressMap {
   [tmdbId: number]: {
@@ -29,6 +109,7 @@ export function getLocalWatchlist(): WatchlistMovie[] {
     const list: WatchlistMovie[] = JSON.parse(raw);
     return list.map((m) => ({
       ...m,
+      poster_path: sanitizePosterPath(m.poster_path),
       priority: normalizePriority(m.priority),
       platforms: normalizePlatformsList(m.platforms || []),
     }));
@@ -243,6 +324,8 @@ export function saveLocalTimelinePeriod(period: TimelinePeriod): void {
 
 export function createBackupPayload(): BucklistBackupData {
   const watchlist = getLocalWatchlist();
+  const gamesWatchlist = getLocalGamesWatchlist();
+  const appMode = getLocalAppMode();
   const tvProgress = getLocalTvProgress();
   const toWatchViewMode = getLocalToWatchViewMode();
   const watchedViewMode = getLocalWatchedViewMode();
@@ -265,6 +348,8 @@ export function createBackupPayload(): BucklistBackupData {
     appName: "Bucklist",
     exportedAt: new Date().toISOString(),
     watchlist,
+    gamesWatchlist,
+    appMode,
     collections,
     tvProgress,
     preferences: {
@@ -273,7 +358,7 @@ export function createBackupPayload(): BucklistBackupData {
       watchedCategory,
     },
     stats: {
-      totalItems: watchlist.length,
+      totalItems: watchlist.length + gamesWatchlist.length,
       toWatchCount,
       watchedCount,
       tvTrackedCount,
@@ -742,9 +827,11 @@ export function validateAndParseBackupJson(jsonString: string): ImportValidation
 export function resetAllLocalData(): void {
   try {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
+    localStorage.removeItem(GAMES_STORAGE_KEY);
     localStorage.removeItem(TV_PROGRESS_KEY);
-    // Keep preference keys or reset if desired, but clear watchlist and progress
+    localStorage.removeItem(APP_MODE_KEY);
     saveLocalWatchlist([]);
+    saveLocalGamesWatchlist([]);
     saveLocalTvProgress({});
   } catch {
     // ignore
@@ -761,11 +848,18 @@ export function applyImportedBackup(
   tvProgressMerged: number;
 } {
   const currentWatchlist = getLocalWatchlist();
+  const currentGamesWatchlist = getLocalGamesWatchlist();
   const currentTvProgress = getLocalTvProgress();
 
   if (mode === "replace") {
     // Direct replacement
-    saveLocalWatchlist(backup.watchlist);
+    saveLocalWatchlist(backup.watchlist || []);
+    if (backup.gamesWatchlist) {
+      saveLocalGamesWatchlist(backup.gamesWatchlist);
+    }
+    if (backup.appMode) {
+      saveLocalAppMode(backup.appMode);
+    }
     if (backup.tvProgress) {
       saveLocalTvProgress(backup.tvProgress);
     }
@@ -781,17 +875,17 @@ export function applyImportedBackup(
       }
     }
 
+    const totalCount = (backup.watchlist?.length || 0) + (backup.gamesWatchlist?.length || 0);
     return {
-      totalItems: backup.watchlist.length,
-      newItemsAdded: backup.watchlist.length,
+      totalItems: totalCount,
+      newItemsAdded: totalCount,
       itemsUpdated: 0,
       tvProgressMerged: Object.keys(backup.tvProgress || {}).length,
     };
   }
 
-  // Merge Mode
+  // Merge Mode for Cinema
   const movieMapByTmdb = new Map<number, WatchlistMovie>();
-  // Index existing items
   for (const item of currentWatchlist) {
     movieMapByTmdb.set(item.tmdb_id, item);
   }
@@ -799,15 +893,12 @@ export function applyImportedBackup(
   let newItemsAdded = 0;
   let itemsUpdated = 0;
 
-  for (const importedItem of backup.watchlist) {
+  for (const importedItem of backup.watchlist || []) {
     const existing = movieMapByTmdb.get(importedItem.tmdb_id);
     if (!existing) {
-      // New item
       movieMapByTmdb.set(importedItem.tmdb_id, importedItem);
       newItemsAdded++;
     } else {
-      // Item exists - merge smart:
-      // If imported is watched and existing is unwatched, update to watched with rating
       let hasChanges = false;
       const merged: WatchlistMovie = { ...existing };
 
@@ -821,7 +912,6 @@ export function applyImportedBackup(
         hasChanges = true;
       }
 
-      // Merge platforms and genres if imported has more
       if (importedItem.platforms && importedItem.platforms.length > 0) {
         const mergedPlatforms = Array.from(new Set([...(existing.platforms || []), ...importedItem.platforms]));
         if (mergedPlatforms.length !== (existing.platforms || []).length) {
@@ -848,6 +938,35 @@ export function applyImportedBackup(
   const finalWatchlist = Array.from(movieMapByTmdb.values());
   saveLocalWatchlist(finalWatchlist);
 
+  // Merge Games Watchlist if present in backup
+  if (backup.gamesWatchlist && backup.gamesWatchlist.length > 0) {
+    const gamesMap = new Map<number, WatchlistMovie>();
+    for (const g of currentGamesWatchlist) {
+      gamesMap.set(g.tmdb_id, g);
+    }
+    for (const importedGame of backup.gamesWatchlist) {
+      const existing = gamesMap.get(importedGame.tmdb_id);
+      if (!existing) {
+        gamesMap.set(importedGame.tmdb_id, importedGame);
+        newItemsAdded++;
+      } else {
+        let hasChanges = false;
+        const merged: WatchlistMovie = { ...existing };
+        if (!existing.watched && importedGame.watched) {
+          merged.watched = true;
+          merged.watched_date = importedGame.watched_date || existing.watched_date || new Date().toISOString().split("T")[0];
+          merged.rating = importedGame.rating ?? existing.rating;
+          hasChanges = true;
+        }
+        if (hasChanges) {
+          itemsUpdated++;
+          gamesMap.set(importedGame.tmdb_id, merged);
+        }
+      }
+    }
+    saveLocalGamesWatchlist(Array.from(gamesMap.values()));
+  }
+
   // Merge TV progress
   let tvProgressMergedCount = 0;
   const mergedTvProgress: TvProgressMap = { ...currentTvProgress };
@@ -861,14 +980,12 @@ export function applyImportedBackup(
         mergedTvProgress[tmdbId] = importedProgress;
         tvProgressMergedCount++;
       } else {
-        // Merge episodes set
         const epSet = new Set<string>([
           ...(existingProg.watchedEpisodes || []),
           ...(importedProgress.watchedEpisodes || []),
         ]);
         const mergedEpisodes = Array.from(epSet);
 
-        // Merge season ratings
         const mergedRatings = {
           ...(existingProg.seasonRatings || {}),
           ...(importedProgress.seasonRatings || {}),
@@ -887,7 +1004,7 @@ export function applyImportedBackup(
   }
 
   return {
-    totalItems: finalWatchlist.length,
+    totalItems: finalWatchlist.length + (backup.gamesWatchlist?.length || 0),
     newItemsAdded,
     itemsUpdated,
     tvProgressMerged: tvProgressMergedCount,

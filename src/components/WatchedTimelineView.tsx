@@ -13,7 +13,7 @@ import {
   ChevronDown,
   ChevronsUpDown,
 } from "lucide-react";
-import type { WatchlistMovie, TimelinePeriod } from "../types";
+import type { WatchlistMovie, TimelinePeriod, AppMode } from "../types";
 import type { TvProgressMap } from "../lib/storage";
 import { getPosterUrl } from "../lib/api";
 import { OttBadge } from "./OttBadge";
@@ -37,6 +37,7 @@ interface WatchedTimelineViewProps {
   onUpdateWatchedDate: (item: WatchlistMovie, newDate: string) => void;
   onOpenTvDrawer: (item: WatchlistMovie) => void;
   tvProgressMap: TvProgressMap;
+  appMode?: AppMode;
 }
 
 interface TimelineGroup {
@@ -91,6 +92,7 @@ export function WatchedTimelineView({
   onUpdateWatchedDate,
   onOpenTvDrawer,
   tvProgressMap,
+  appMode = "cinema",
 }: WatchedTimelineViewProps) {
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -471,6 +473,7 @@ export function WatchedTimelineView({
                                 value={item.watched_date || itemDateStr}
                                 onChange={(newDate) => onUpdateWatchedDate(item, newDate)}
                                 compact={true}
+                                appMode={appMode}
                               />
 
                               {isTv && (
@@ -665,6 +668,7 @@ export function WatchedTimelineView({
                               value={item.watched_date || itemDateStr}
                               onChange={(newDate) => onUpdateWatchedDate(item, newDate)}
                               compact={true}
+                              appMode={appMode}
                             />
 
                             {/* Quick Action Icons */}

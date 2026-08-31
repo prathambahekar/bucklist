@@ -450,17 +450,55 @@ export const STILL_BASE = "https://image.tmdb.org/t/p/w300";
 
 export function getPosterUrl(posterPath?: string | null): string | null {
   if (!posterPath) return null;
-  return `${POSTER_BASE}${posterPath}`;
+  let cleanPath = posterPath.trim();
+  if (cleanPath.includes("https://image.tmdb.org/t/p/w342http")) {
+    cleanPath = cleanPath.replace("https://image.tmdb.org/t/p/w342", "");
+  }
+  if (cleanPath.includes("http://image.tmdb.org/t/p/w342http")) {
+    cleanPath = cleanPath.replace("http://image.tmdb.org/t/p/w342", "");
+  }
+  if (
+    cleanPath.startsWith("http://") ||
+    cleanPath.startsWith("https://") ||
+    cleanPath.startsWith("data:") ||
+    cleanPath.startsWith("blob:")
+  ) {
+    return cleanPath;
+  }
+  return `${POSTER_BASE}${cleanPath.startsWith("/") ? "" : "/"}${cleanPath}`;
 }
 
 export function getBackdropUrl(backdropPath?: string | null): string | null {
   if (!backdropPath) return null;
-  return `${BACKDROP_BASE}${backdropPath}`;
+  let cleanPath = backdropPath.trim();
+  if (cleanPath.includes("https://image.tmdb.org/t/p/w780http")) {
+    cleanPath = cleanPath.replace("https://image.tmdb.org/t/p/w780", "");
+  }
+  if (cleanPath.includes("http://image.tmdb.org/t/p/w780http")) {
+    cleanPath = cleanPath.replace("http://image.tmdb.org/t/p/w780", "");
+  }
+  if (
+    cleanPath.startsWith("http://") ||
+    cleanPath.startsWith("https://") ||
+    cleanPath.startsWith("data:") ||
+    cleanPath.startsWith("blob:")
+  ) {
+    return cleanPath;
+  }
+  return `${BACKDROP_BASE}${cleanPath.startsWith("/") ? "" : "/"}${cleanPath}`;
 }
 
 export function getStillUrl(stillPath?: string | null): string | null {
   if (!stillPath) return null;
-  return `${STILL_BASE}${stillPath}`;
+  if (
+    stillPath.startsWith("http://") ||
+    stillPath.startsWith("https://") ||
+    stillPath.startsWith("data:") ||
+    stillPath.startsWith("blob:")
+  ) {
+    return stillPath;
+  }
+  return `${STILL_BASE}${stillPath.startsWith("/") ? "" : "/"}${stillPath}`;
 }
 
 export async function fetchTvSeriesDetails(tmdbId: number) {

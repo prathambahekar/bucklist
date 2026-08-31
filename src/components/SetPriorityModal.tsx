@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
-import { X, Flame, Star, Film, Coffee, Check, BookmarkPlus } from "lucide-react";
-import type { PriorityLevel, SearchResult, WatchlistMovie } from "../types";
-import { PRIORITY_ORDER, PRIORITY_CONFIGS, getPriorityConfig } from "../types";
+import { X, Flame, Star, Film, Coffee, Check, BookmarkPlus, Gamepad2 } from "lucide-react";
+import type { AppMode, PriorityLevel, SearchResult, WatchlistMovie } from "../types";
+import { PRIORITY_ORDER, PRIORITY_CONFIGS, getPriorityLabel, getPriorityDescription } from "../types";
 import { getPosterUrl } from "../lib/api";
 
 interface SetPriorityModalProps {
@@ -10,6 +10,7 @@ interface SetPriorityModalProps {
   onClose: () => void;
   onSelectPriority: (priority: PriorityLevel, movie: SearchResult | WatchlistMovie) => void;
   initialPriority?: PriorityLevel;
+  appMode?: AppMode;
 }
 
 const PRIORITY_ICONS: Record<PriorityLevel, React.ReactNode> = {
@@ -25,7 +26,10 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
   onClose,
   onSelectPriority,
   initialPriority = "wanna_see",
+  appMode = "cinema",
 }) => {
+  const isGaming = appMode === "gaming" || (movie && "media_type" in movie && movie.media_type === "game");
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -65,12 +69,20 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <BookmarkPlus className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-xl border flex items-center justify-center ${
+              isGaming
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+            }`}>
+              {isGaming ? <Gamepad2 className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-base font-bold text-zinc-100">Add to Watchlist</h3>
-              <p className="text-xs text-zinc-400">Select priority for this title</p>
+              <h3 className="text-base font-bold text-zinc-100">
+                {isGaming ? "Add to Gaming Backlog" : "Add to Watchlist"}
+              </h3>
+              <p className="text-xs text-zinc-400">
+                {isGaming ? "Select backlog priority for this game" : "Select priority for this title"}
+              </p>
             </div>
           </div>
           <button
@@ -82,7 +94,7 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
           </button>
         </div>
 
-        {/* Movie Info Card */}
+        {/* Media Info Card */}
         <div className="flex items-center gap-3 p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 mb-4">
           <div className="w-11 h-15 rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800">
             {poster ? (
@@ -94,7 +106,7 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-zinc-700">
-                <Film className="w-5 h-5" />
+                {isGaming ? <Gamepad2 className="w-5 h-5" /> : <Film className="w-5 h-5" />}
               </div>
             )}
           </div>
@@ -116,9 +128,11 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
 
         {/* Priority Options List */}
         <div className="space-y-2 mb-2">
-          {PRIORITY_ORDER.map((lvl, idx) => {
+          {PRIORITY_ORDER.map((lvl) => {
             const cfg = PRIORITY_CONFIGS[lvl];
             const isSelected = initialPriority === lvl;
+            const dynamicLabel = getPriorityLabel(lvl, isGaming ? "gaming" : "cinema");
+            const dynamicDesc = getPriorityDescription(lvl, isGaming ? "gaming" : "cinema");
 
             return (
               <button
@@ -140,12 +154,19 @@ export const SetPriorityModal: React.FC<SetPriorityModalProps> = ({
                         : "bg-zinc-950 border-zinc-800 group-hover:border-zinc-700"
                     }`}
                   >
-                    {PRIORITY_ICONS[lvl]}
+                    {lvl === "wanna_see" && isGaming ? (
+                      <Gamepad2 className="w-4 h-4 text-zinc-300" />
+                    ) : (
+                      PRIORITY_ICONS[lvl]
+                    )}
                   </div>
 
                   <div className="flex flex-col min-w-0">
                     <span className={`text-xs sm:text-sm font-bold leading-tight ${cfg.badgeText}`}>
-                      {cfg.label}
+                      {dynamicLabel}
+                    </span>
+                    <span className="text-[11px] text-zinc-400 truncate">
+                      {dynamicDesc}
                     </span>
                   </div>
                 </div>

@@ -33,10 +33,15 @@ import {
   Users,
   Flame,
   ArrowUpDown,
+  Gamepad2,
 } from "lucide-react";
 import {
   getLocalWatchlist,
   saveLocalWatchlist,
+  getLocalWatchlistForMode,
+  saveLocalWatchlistForMode,
+  getLocalAppMode,
+  saveLocalAppMode,
   getLocalTvProgress,
   getSeriesSeasonRatings,
   getLocalWatchedViewMode,
@@ -70,6 +75,7 @@ import {
   detectMediaType,
   normalizePlatformsList,
 } from "./lib/api";
+import { fetchGameDetails } from "./lib/rawgApi";
 import { EpisodeDrawer } from "./components/EpisodeDrawer";
 import { StarRating } from "./components/StarRating";
 import { OttBadge, getPlatformAccentTheme } from "./components/OttBadge";
@@ -95,9 +101,11 @@ import {
   type TabType,
   type MovieCollection,
   type PriorityLevel,
+  type AppMode,
   PRIORITY_CONFIGS,
   PRIORITY_ORDER,
   getPriorityConfig,
+  getPriorityLabel,
   normalizePriority,
 } from "./types";
 
@@ -110,6 +118,7 @@ function getLocalTodayString(): string {
 }
 
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>(() => getLocalAppMode());
   const [tab, setTab] = useState<TabType>("towatch");
   const [movies, setMovies] = useState<WatchlistMovie[]>([]);
   const [watched, setWatched] = useState<WatchlistMovie[]>([]);
@@ -276,6 +285,29 @@ export default function App() {
     saveLocalWatchedCategory(cat);
   }, []);
 
+  const handleToggleAppMode = useCallback(
+    (newMode: AppMode) => {
+      setAppMode(newMode);
+      saveLocalAppMode(newMode);
+      setSelectedGenre(null);
+      setSelectedPlatform(null);
+      setSelectedPriorityFilter("all");
+      handleSetWatchedCategory("all");
+    },
+    [handleSetWatchedCategory]
+  );
+
+  const getActiveWatchlist = useCallback(() => {
+    return getLocalWatchlistForMode(appMode);
+  }, [appMode]);
+
+  const saveActiveWatchlist = useCallback(
+    (data: WatchlistMovie[]) => {
+      saveLocalWatchlistForMode(appMode, data);
+    },
+    [appMode]
+  );
+
   // Load TV progress
   useEffect(() => {
     setTvProgressMap(getLocalTvProgress());
@@ -365,7 +397,7 @@ export default function App() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const all = getLocalWatchlist();
+      const all = getLocalWatchlistForMode(appMode);
 
       // Collect known TV IDs only from items that are verified as TV
       const tvIds = new Set<number>();
@@ -374,50 +406,52 @@ export default function App() {
       });
       setKnownTvTmdbIds(tvIds);
 
-      // Auto-detect missing media types in background
-      const missingMedia = all.filter((m) => !m.media_type);
-      if (missingMedia.length > 0) {
-        Promise.all(
-          missingMedia.map(async (item) => {
-            const detected = await detectMediaType(item.tmdb_id, item.title, item.release_year);
-            return { id: item.id, tmdb_id: item.tmdb_id, media_type: detected };
-          })
-        ).then((results) => {
-          let hasNewTv = false;
-          const updatedTvIds = new Set(tvIds);
-          results.forEach((r) => {
-            if (r.media_type === "tv") {
-              updatedTvIds.add(r.tmdb_id);
-              hasNewTv = true;
+      // Auto-detect missing media types in background if cinema mode
+      if (appMode === "cinema") {
+        const missingMedia = all.filter((m) => !m.media_type);
+        if (missingMedia.length > 0) {
+          Promise.all(
+            missingMedia.map(async (item) => {
+              const detected = await detectMediaType(item.tmdb_id, item.title, item.release_year);
+              return { id: item.id, tmdb_id: item.tmdb_id, media_type: detected };
+            })
+          ).then((results) => {
+            let hasNewTv = false;
+            const updatedTvIds = new Set(tvIds);
+            results.forEach((r) => {
+              if (r.media_type === "tv") {
+                updatedTvIds.add(r.tmdb_id);
+                hasNewTv = true;
+              }
+            });
+
+            if (hasNewTv) {
+              setKnownTvTmdbIds(updatedTvIds);
             }
-          });
 
-          if (hasNewTv) {
-            setKnownTvTmdbIds(updatedTvIds);
-          }
+            // Update local state with accurately detected types
+            setMovies((prev) =>
+              prev.map((m) => {
+                const res = results.find((r) => r.id === m.id);
+                return res ? { ...m, media_type: res.media_type } : m;
+              })
+            );
+            setWatched((prev) =>
+              prev.map((m) => {
+                const res = results.find((r) => r.id === m.id);
+                return res ? { ...m, media_type: res.media_type } : m;
+              })
+            );
 
-          // Update local state with accurately detected types
-          setMovies((prev) =>
-            prev.map((m) => {
+            // Also persist back to local storage
+            const current = getLocalWatchlistForMode(appMode);
+            const updatedLocal = current.map((m) => {
               const res = results.find((r) => r.id === m.id);
               return res ? { ...m, media_type: res.media_type } : m;
-            })
-          );
-          setWatched((prev) =>
-            prev.map((m) => {
-              const res = results.find((r) => r.id === m.id);
-              return res ? { ...m, media_type: res.media_type } : m;
-            })
-          );
-
-          // Also persist back to local storage
-          const current = getLocalWatchlist();
-          const updatedLocal = current.map((m) => {
-            const res = results.find((r) => r.id === m.id);
-            return res ? { ...m, media_type: res.media_type } : m;
+            });
+            saveLocalWatchlistForMode(appMode, updatedLocal);
           });
-          saveLocalWatchlist(updatedLocal);
-        });
+        }
       }
 
       setMovies(all.filter((m) => !m.watched));
@@ -429,7 +463,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appMode]);
 
   useEffect(() => {
     fetchAll();
@@ -440,6 +474,23 @@ export default function App() {
     if (!detailMovie?.tmdb_id) {
       setDetailExtra(null);
       setDetailExtraLoading(false);
+      return;
+    }
+
+    if (detailMovie.media_type === "game" || appMode === "gaming") {
+      (async () => {
+        setDetailExtraLoading(true);
+        try {
+          const gameResult = await fetchGameDetails(detailMovie.tmdb_id);
+          if (gameResult?.detailExtra) {
+            setDetailExtra(gameResult.detailExtra);
+          }
+        } catch (e) {
+          console.error("Game detail fetch error:", e);
+        } finally {
+          setDetailExtraLoading(false);
+        }
+      })();
       return;
     }
 
@@ -518,11 +569,11 @@ export default function App() {
         setDetailExtraLoading(false);
       }
     })();
-  }, [detailMovie]);
+  }, [detailMovie, appMode]);
 
   const handleSelectPriorityAndAdd = useCallback(
     (priority: PriorityLevel, item: SearchResult | WatchlistMovie) => {
-      const current = getLocalWatchlist();
+      const current = getActiveWatchlist();
       const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
       const existingInWatched = current.find((m) => m.tmdb_id === item.tmdb_id && m.watched);
 
@@ -532,7 +583,7 @@ export default function App() {
           priority,
         };
         const updated = current.map((m) => (m.id === existingInWatchlist.id ? updatedMovie : m));
-        saveLocalWatchlist(updated);
+        saveActiveWatchlist(updated);
         setMovies((prev) => prev.map((m) => (m.id === existingInWatchlist.id ? updatedMovie : m)));
       } else if (existingInWatched) {
         const unwatchedMovie: WatchlistMovie = {
@@ -542,7 +593,7 @@ export default function App() {
           priority,
         };
         const updated = current.map((m) => (m.id === existingInWatched.id ? unwatchedMovie : m));
-        saveLocalWatchlist(updated);
+        saveActiveWatchlist(updated);
         setWatched((prev) => prev.filter((m) => m.id !== existingInWatched.id));
         setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.id !== existingInWatched.id)]);
       } else {
@@ -552,7 +603,7 @@ export default function App() {
           title: item.title,
           poster_path: item.poster_path,
           release_year: item.release_year,
-          media_type: item.media_type,
+          media_type: item.media_type || (appMode === "gaming" ? "game" : "movie"),
           genres: item.genres || [],
           platforms: normalizePlatformsList(item.platforms || []),
           priority,
@@ -562,35 +613,38 @@ export default function App() {
           created_at: new Date().toISOString(),
         };
         const updated = [newRecord, ...current];
-        saveLocalWatchlist(updated);
+        saveActiveWatchlist(updated);
         setMovies((prev) => [newRecord, ...prev]);
       }
       setPriorityModalMovie(null);
       setAddingId(null);
     },
-    []
+    [getActiveWatchlist, saveActiveWatchlist, appMode]
   );
 
   async function handleAdd(item: SearchResult) {
     handlePromptAddToWatchlist(item);
   }
 
-  const handlePromptAddToWatchlist = useCallback((item: SearchResult | WatchlistMovie) => {
-    const current = getLocalWatchlist();
-    const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
-    if (existingInWatchlist) {
-      // Re-clicking "In Watchlist" in drawer removes/undoes
-      const updated = current.filter((m) => m.id !== existingInWatchlist.id);
-      saveLocalWatchlist(updated);
-      setMovies((prev) => prev.filter((m) => m.id !== existingInWatchlist.id));
-    } else {
-      // Open priority picker modal
-      setPriorityModalMovie(item);
-      setPriorityModalInitial(
-        normalizePriority(("priority" in item && item.priority) ? item.priority : "wanna_see")
-      );
-    }
-  }, []);
+  const handlePromptAddToWatchlist = useCallback(
+    (item: SearchResult | WatchlistMovie) => {
+      const current = getActiveWatchlist();
+      const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
+      if (existingInWatchlist) {
+        // Re-clicking "In Watchlist" in drawer removes/undoes
+        const updated = current.filter((m) => m.id !== existingInWatchlist.id);
+        saveActiveWatchlist(updated);
+        setMovies((prev) => prev.filter((m) => m.id !== existingInWatchlist.id));
+      } else {
+        // Open priority picker modal
+        setPriorityModalMovie(item);
+        setPriorityModalInitial(
+          normalizePriority(("priority" in item && item.priority) ? item.priority : "wanna_see")
+        );
+      }
+    },
+    [getActiveWatchlist, saveActiveWatchlist]
+  );
 
   const handleAddToWatchlist = useCallback(
     async (item: SearchResult) => {
@@ -632,14 +686,14 @@ export default function App() {
 
   const handleToggleWatched = useCallback(
     (item: SearchResult) => {
-      const current = getLocalWatchlist();
+      const current = getActiveWatchlist();
       const existingInWatched = current.find((m) => m.tmdb_id === item.tmdb_id && m.watched);
       const existingInWatchlist = current.find((m) => m.tmdb_id === item.tmdb_id && !m.watched);
 
       if (existingInWatched) {
         // Re-clicking "Watched" / "Mark Watched" undoes the watched task: remove from watched
         const updated = current.filter((m) => m.id !== existingInWatched.id);
-        saveLocalWatchlist(updated);
+        saveActiveWatchlist(updated);
         setWatched((prev) => prev.filter((m) => m.id !== existingInWatched.id));
       } else if (existingInWatchlist) {
         handleOpenWatchedModal(existingInWatchlist, 5);
@@ -651,7 +705,7 @@ export default function App() {
           title: item.title,
           poster_path: item.poster_path,
           release_year: item.release_year,
-          media_type: item.media_type,
+          media_type: item.media_type || (appMode === "gaming" ? "game" : "movie"),
           genres: item.genres || [],
           platforms: normalizePlatformsList(item.platforms || []),
           watched: false,
@@ -662,7 +716,7 @@ export default function App() {
         handleOpenWatchedModal(newRecord, 5);
       }
     },
-    [handleOpenWatchedModal]
+    [getActiveWatchlist, saveActiveWatchlist, handleOpenWatchedModal, appMode]
   );
 
   const handleAddToWatched = useCallback(
@@ -677,18 +731,17 @@ export default function App() {
     const watchedDate = userWatchedDate || watchedModalMovie.watched_date || getLocalTodayString();
 
     // Prepare platform list and selected venue:
-    // When marked as watched, store ONLY the selected OTT or Theatre/Other
     let finalPlatform = "";
     if (userWatchedVenue === "theatre") {
       finalPlatform = "Theatre";
     } else if (userWatchedVenue === "other") {
       finalPlatform = userWatchedPlatform.trim() || "Other";
     } else {
-      // OTT
+      // OTT / Gaming platform
       finalPlatform =
         userWatchedPlatform.trim() ||
         (watchedModalMovie.platforms && watchedModalMovie.platforms[0]) ||
-        "OTT";
+        (appMode === "gaming" ? "PC" : "OTT");
     }
 
     const updatedPlatforms = [finalPlatform];
@@ -712,10 +765,10 @@ export default function App() {
     setWatchedModalMovie(null);
 
     // Save to local storage
-    const current = getLocalWatchlist();
+    const current = getActiveWatchlist();
     const filtered = current.filter((m) => m.tmdb_id !== watchedModalMovie.tmdb_id);
     const updatedList = [updatedMovie, ...filtered];
-    saveLocalWatchlist(updatedList);
+    saveActiveWatchlist(updatedList);
   }
 
   async function handleMarkSeriesWatched(series: WatchlistMovie, rating: number = 5) {
@@ -731,9 +784,9 @@ export default function App() {
     setWatched((prev) => [updatedMovie, ...prev.filter((m) => m.id !== series.id)]);
     setActiveTvDrawerMovie(null);
 
-    const current = getLocalWatchlist();
+    const current = getActiveWatchlist();
     const updatedList = current.map((m) => (m.id === series.id ? updatedMovie : m));
-    saveLocalWatchlist(updatedList);
+    saveActiveWatchlist(updatedList);
   }
 
   async function handleTvProgressUpdated(tmdbId: number, watchedCount: number, totalCount: number) {
@@ -771,9 +824,9 @@ export default function App() {
         setMovies((prev) => prev.filter((m) => m.tmdb_id !== tmdbId));
         setWatched((prev) => [updatedMovie, ...prev.filter((m) => m.tmdb_id !== tmdbId)]);
 
-        const current = getLocalWatchlist();
+        const current = getActiveWatchlist();
         const updatedList = current.map((m) => (m.tmdb_id === tmdbId ? updatedMovie : m));
-        saveLocalWatchlist(updatedList);
+        saveActiveWatchlist(updatedList);
       }
     } else if (totalCount > 0 && watchedCount < totalCount) {
       // Revert if user unchecks an episode from 100%
@@ -788,9 +841,9 @@ export default function App() {
         setWatched((prev) => prev.filter((m) => m.tmdb_id !== tmdbId));
         setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.tmdb_id !== tmdbId)]);
 
-        const current = getLocalWatchlist();
+        const current = getActiveWatchlist();
         const updatedList = current.map((m) => (m.tmdb_id === tmdbId ? unwatchedMovie : m));
-        saveLocalWatchlist(updatedList);
+        saveActiveWatchlist(updatedList);
       }
     }
   }
@@ -803,11 +856,11 @@ export default function App() {
       prev.map((m) => (m.tmdb_id === tmdbId ? { ...m, rating: newRating } : m))
     );
 
-    const current = getLocalWatchlist();
+    const current = getActiveWatchlist();
     const updatedList = current.map((m) =>
       m.tmdb_id === tmdbId ? { ...m, rating: newRating } : m
     );
-    saveLocalWatchlist(updatedList);
+    saveActiveWatchlist(updatedList);
   }
 
   async function handleDelete(id: string) {
@@ -815,8 +868,8 @@ export default function App() {
     setWatched((prev) => prev.filter((m) => m.id !== id));
     setSelectedMovieIds((prev) => prev.filter((selectedId) => selectedId !== id));
 
-    const current = getLocalWatchlist();
-    saveLocalWatchlist(current.filter((m) => m.id !== id));
+    const current = getActiveWatchlist();
+    saveActiveWatchlist(current.filter((m) => m.id !== id));
   }
 
   // Batch Multi-Select Handlers
@@ -841,13 +894,13 @@ export default function App() {
     setMovies((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
     setWatched((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
 
-    const current = getLocalWatchlist();
+    const current = getActiveWatchlist();
     const updatedList = current.filter((m) => !idsToDelete.has(m.id));
-    saveLocalWatchlist(updatedList);
+    saveActiveWatchlist(updatedList);
 
     setSelectedMovieIds([]);
     setIsBatchMode(false);
-  }, [selectedMovieIds]);
+  }, [selectedMovieIds, getActiveWatchlist, saveActiveWatchlist]);
 
   const handleBatchMarkWatched = useCallback(
     (rating: number = 5) => {
@@ -866,7 +919,7 @@ export default function App() {
       setMovies((prev) => prev.filter((m) => !idsToMark.has(m.id)));
       setWatched((prev) => [...newlyWatched, ...prev.filter((m) => !idsToMark.has(m.id))]);
 
-      const current = getLocalWatchlist();
+      const current = getActiveWatchlist();
       const updatedList = current.map((m) => {
         if (idsToMark.has(m.id)) {
           return {
@@ -878,12 +931,12 @@ export default function App() {
         }
         return m;
       });
-      saveLocalWatchlist(updatedList);
+      saveActiveWatchlist(updatedList);
 
       setSelectedMovieIds([]);
       setIsBatchMode(false);
     },
-    [selectedMovieIds, movies]
+    [selectedMovieIds, movies, getActiveWatchlist, saveActiveWatchlist]
   );
 
   const handleBatchMoveToWatchlist = useCallback(() => {
@@ -900,7 +953,7 @@ export default function App() {
     setWatched((prev) => prev.filter((m) => !idsToMove.has(m.id)));
     setMovies((prev) => [...newlyUnwatched, ...prev.filter((m) => !idsToMove.has(m.id))]);
 
-    const current = getLocalWatchlist();
+    const current = getActiveWatchlist();
     const updatedList = current.map((m) => {
       if (idsToMove.has(m.id)) {
         return {
@@ -911,11 +964,11 @@ export default function App() {
       }
       return m;
     });
-    saveLocalWatchlist(updatedList);
+    saveActiveWatchlist(updatedList);
 
     setSelectedMovieIds([]);
     setIsBatchMode(false);
-  }, [selectedMovieIds, watched]);
+  }, [selectedMovieIds, watched, getActiveWatchlist, saveActiveWatchlist]);
 
   const handleBatchAddGenre = useCallback(
     (newGenre: string) => {
@@ -932,11 +985,11 @@ export default function App() {
       setMovies((prev) => prev.map(updateItemGenres));
       setWatched((prev) => prev.map(updateItemGenres));
 
-      const current = getLocalWatchlist();
+      const current = getActiveWatchlist();
       const updatedList = current.map(updateItemGenres);
-      saveLocalWatchlist(updatedList);
+      saveActiveWatchlist(updatedList);
     },
-    [selectedMovieIds]
+    [selectedMovieIds, getActiveWatchlist, saveActiveWatchlist]
   );
 
   const handleUpdatePriority = useCallback(
@@ -953,13 +1006,13 @@ export default function App() {
         setDetailMovie((prev) => (prev ? { ...prev, priority: newPriority } : null));
       }
 
-      const current = getLocalWatchlist();
+      const current = getActiveWatchlist();
       const updatedList = current.map((m) =>
         m.id === movieId ? { ...m, priority: newPriority } : m
       );
-      saveLocalWatchlist(updatedList);
+      saveActiveWatchlist(updatedList);
     },
-    [detailMovie]
+    [detailMovie, getActiveWatchlist, saveActiveWatchlist]
   );
 
   const handleBatchSetPriority = useCallback(
@@ -974,43 +1027,49 @@ export default function App() {
         prev.map((m) => (targetIds.has(m.id) ? { ...m, priority } : m))
       );
 
-      const current = getLocalWatchlist();
+      const current = getActiveWatchlist();
       const updatedList = current.map((m) =>
         targetIds.has(m.id) ? { ...m, priority } : m
       );
-      saveLocalWatchlist(updatedList);
+      saveActiveWatchlist(updatedList);
 
       setSelectedMovieIds([]);
       setIsBatchMode(false);
     },
-    [selectedMovieIds]
+    [selectedMovieIds, getActiveWatchlist, saveActiveWatchlist]
   );
 
-  const handleMoveToWatchlist = useCallback((item: WatchlistMovie) => {
-    const unwatchedMovie: WatchlistMovie = {
-      ...item,
-      watched: false,
-      watched_date: null,
-      priority: normalizePriority(item.priority),
-    };
-    setWatched((prev) => prev.filter((m) => m.id !== item.id));
-    setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.id !== item.id)]);
+  const handleMoveToWatchlist = useCallback(
+    (item: WatchlistMovie) => {
+      const unwatchedMovie: WatchlistMovie = {
+        ...item,
+        watched: false,
+        watched_date: null,
+        priority: normalizePriority(item.priority),
+      };
+      setWatched((prev) => prev.filter((m) => m.id !== item.id));
+      setMovies((prev) => [unwatchedMovie, ...prev.filter((m) => m.id !== item.id)]);
 
-    const current = getLocalWatchlist();
-    const updatedList = current.map((m) => (m.id === item.id ? unwatchedMovie : m));
-    saveLocalWatchlist(updatedList);
-  }, []);
+      const current = getActiveWatchlist();
+      const updatedList = current.map((m) => (m.id === item.id ? unwatchedMovie : m));
+      saveActiveWatchlist(updatedList);
+    },
+    [getActiveWatchlist, saveActiveWatchlist]
+  );
 
-  const handleUpdateWatchedDate = useCallback((item: WatchlistMovie, newDate: string) => {
-    const updatedMovie: WatchlistMovie = {
-      ...item,
-      watched_date: newDate,
-    };
-    setWatched((prev) => prev.map((m) => (m.id === item.id ? updatedMovie : m)));
-    const current = getLocalWatchlist();
-    const updatedList = current.map((m) => (m.id === item.id ? updatedMovie : m));
-    saveLocalWatchlist(updatedList);
-  }, []);
+  const handleUpdateWatchedDate = useCallback(
+    (item: WatchlistMovie, newDate: string) => {
+      const updatedMovie: WatchlistMovie = {
+        ...item,
+        watched_date: newDate,
+      };
+      setWatched((prev) => prev.map((m) => (m.id === item.id ? updatedMovie : m)));
+      const current = getActiveWatchlist();
+      const updatedList = current.map((m) => (m.id === item.id ? updatedMovie : m));
+      saveActiveWatchlist(updatedList);
+    },
+    [getActiveWatchlist, saveActiveWatchlist]
+  );
 
   const existingTmdbIds = useMemo(
     () => new Set<number>([...movies.map((m) => m.tmdb_id), ...watched.map((m) => m.tmdb_id)]),
@@ -1234,6 +1293,19 @@ export default function App() {
     // User request: "only show badges for must watch on the card"
     const showCardPriorityBadge = !isWatchedTab && itemPriority === "must_watch";
 
+    const defaultFallbackPoster =
+      appMode === "gaming" || item.media_type === "game"
+        ? "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=300&auto=format&fit=crop&q=60"
+        : "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=300&auto=format&fit=crop&q=60";
+
+    const handleImgError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+      const target = e.currentTarget;
+      if (!target.dataset.failed) {
+        target.dataset.failed = "true";
+        target.src = defaultFallbackPoster;
+      }
+    };
+
     /* OPTION 0: Card / Thumbnail-only View Mode (Only small thumbnail poster, no details text) */
     if (activeViewMode === "cards") {
       return (
@@ -1244,7 +1316,7 @@ export default function App() {
           disabled={isBatchMode}
           onSwipeRight={handleCardSwipeRight}
           onSwipeLeft={handleCardSwipeLeft}
-          rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
+          rightActionLabel={isWatchedTab ? "Rate" : (appMode === "gaming" ? "Played" : "Watched")}
           leftActionLabel="Delete"
           className="h-full"
         >
@@ -1273,11 +1345,12 @@ export default function App() {
           >
             {/* Small Thumbnail Image */}
             <img
-              src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+              src={poster || defaultFallbackPoster}
               alt={item.title}
               className="w-full h-full object-cover group-hover:brightness-105 transition-all duration-300"
               referrerPolicy="no-referrer"
               loading="lazy"
+              onError={handleImgError}
             />
 
             {/* Subtle Gradient vignette on hover for depth */}
@@ -1315,7 +1388,7 @@ export default function App() {
           disabled={isBatchMode}
           onSwipeRight={handleCardSwipeRight}
           onSwipeLeft={handleCardSwipeLeft}
-          rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
+          rightActionLabel={isWatchedTab ? "Rate" : (appMode === "gaming" ? "Played" : "Watched")}
           leftActionLabel="Delete"
           className="h-full"
         >
@@ -1344,10 +1417,11 @@ export default function App() {
             {/* Poster Aspect Container */}
             <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-zinc-800 shadow-md border border-zinc-800/80">
               <img
-                src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+                src={poster || defaultFallbackPoster}
                 alt={item.title}
                 className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
                 referrerPolicy="no-referrer"
+                onError={handleImgError}
               />
 
               {/* Batch Selection Checkbox */}
@@ -1429,7 +1503,7 @@ export default function App() {
                     className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-center gap-1 bg-zinc-100 hover:bg-amber-400 text-zinc-950 text-[10px] font-bold py-1 px-2 rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
                   >
                     <Check className="w-3 h-3 stroke-[2.5]" />
-                    <span>Watched</span>
+                    <span>{appMode === "gaming" ? "Played" : "Watched"}</span>
                   </button>
                 )
               )}
@@ -1444,7 +1518,7 @@ export default function App() {
                 {item.title}
               </h3>
               <div className="flex items-center justify-between mt-1 text-[10px] sm:text-[11px] text-zinc-500">
-                <span>{item.release_year || (isTv ? "TV Series" : "Movie")}</span>
+                <span>{item.release_year || (appMode === "gaming" || item.media_type === "game" ? "Video Game" : isTv ? "TV Series" : "Movie")}</span>
                 {isWatchedTab ? (
                   <div className="flex items-center gap-1.5">
                     {(item.watched_platform || (item.platforms && item.platforms.length > 0)) && (
@@ -1494,7 +1568,7 @@ export default function App() {
           disabled={isBatchMode}
           onSwipeRight={handleCardSwipeRight}
           onSwipeLeft={handleCardSwipeLeft}
-          rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
+          rightActionLabel={isWatchedTab ? "Rate" : (appMode === "gaming" ? "Played" : "Watched")}
           leftActionLabel="Delete"
         >
           <div
@@ -1524,11 +1598,12 @@ export default function App() {
               {/* Compact Poster Thumbnail */}
               <div className="w-12 h-16 sm:w-13 sm:h-18 rounded-xl overflow-hidden bg-zinc-900 shrink-0 shadow-md ring-1 ring-white/10 relative">
                 <img
-                  src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+                  src={poster || defaultFallbackPoster}
                   alt={item.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   referrerPolicy="no-referrer"
                   loading="lazy"
+                  onError={handleImgError}
                 />
               </div>
 
@@ -1546,6 +1621,7 @@ export default function App() {
                       priority="must_watch"
                       size="xs"
                       interactive={!isBatchMode}
+                      appMode={appMode}
                       onSelectPriority={(newP) => handleUpdatePriority(item, newP)}
                     />
                   )}
@@ -1560,7 +1636,13 @@ export default function App() {
                   <span className="text-zinc-600">•</span>
 
                   <span className="text-zinc-400">
-                    {isItemAnime(item) ? "Anime" : isTv ? "TV Series" : "Movie"}
+                    {appMode === "gaming" || item.media_type === "game"
+                      ? "Video Game"
+                      : isItemAnime(item)
+                      ? "Anime"
+                      : isTv
+                      ? "TV Series"
+                      : "Movie"}
                   </span>
 
                   {firstOtt && (
@@ -1634,10 +1716,10 @@ export default function App() {
                     handleOpenWatchedModal(item, 5);
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-100 hover:text-zinc-950 text-zinc-300 text-xs font-semibold border border-zinc-700/70 transition-all shadow-xs active:scale-95 cursor-pointer"
-                  title="Mark as Watched"
+                  title={appMode === "gaming" ? "Mark as Played" : "Mark as Watched"}
                 >
                   <Check className="w-3.5 h-3.5 stroke-[2.2]" />
-                  <span className="hidden xs:inline">Watched</span>
+                  <span className="hidden xs:inline">{appMode === "gaming" ? "Played" : "Watched"}</span>
                 </button>
               )}
 
@@ -1671,7 +1753,7 @@ export default function App() {
         disabled={isBatchMode}
         onSwipeRight={handleCardSwipeRight}
         onSwipeLeft={handleCardSwipeLeft}
-        rightActionLabel={isWatchedTab ? "Rate" : "Watched"}
+        rightActionLabel={isWatchedTab ? "Rate" : (appMode === "gaming" ? "Played" : "Watched")}
         leftActionLabel="Delete"
       >
         <div
@@ -1699,10 +1781,11 @@ export default function App() {
           {/* Thumbnail */}
           <div className="relative rounded-xl overflow-hidden bg-zinc-800 shrink-0 shadow-md border border-zinc-800/80 w-22 sm:w-26 md:w-28 h-34 sm:h-38 md:h-40">
             <img
-              src={poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+              src={poster || defaultFallbackPoster}
               alt={item.title}
               className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
               referrerPolicy="no-referrer"
+              onError={handleImgError}
             />
           </div>
 
@@ -1755,11 +1838,17 @@ export default function App() {
                     priority="must_watch"
                     size="sm"
                     interactive={!isBatchMode}
+                    appMode={appMode}
                     onSelectPriority={(newP) => handleUpdatePriority(item, newP)}
                   />
                 )}
 
-                {isItemAnime(item) ? (
+                {appMode === "gaming" || item.media_type === "game" ? (
+                  <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <Gamepad2 className="w-2.5 h-2.5" />
+                    <span>Video Game</span>
+                  </span>
+                ) : isItemAnime(item) ? (
                   <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
                     <Sparkles className="w-2.5 h-2.5" />
                     <span>{isTv ? "Anime Series" : "Anime Movie"}</span>
@@ -1846,7 +1935,7 @@ export default function App() {
                       className="w-full flex items-center justify-center gap-2 bg-zinc-100 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 active:scale-98 shadow-sm py-2 sm:py-2.5 px-3 cursor-pointer"
                     >
                       <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
-                      <span className="whitespace-nowrap">Mark as Watched</span>
+                      <span className="whitespace-nowrap">{appMode === "gaming" ? "Mark as Played" : "Mark as Watched"}</span>
                     </button>
                   )
                 ) : (
@@ -1913,17 +2002,55 @@ export default function App() {
         {/* Header Bar */}
         <header id="app-header" className="flex items-center justify-between py-2 sm:py-3 mb-2 sm:mb-3">
           <div className="flex items-center gap-3 select-none">
-            <div id="logo-badge" className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-zinc-950 shadow-lg shadow-amber-500/20 ring-1 ring-amber-400/40">
-              <Bookmark className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
+            <div
+              id="logo-badge"
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center text-zinc-950 shadow-lg ring-1 transition-all duration-300 ${
+                appMode === "gaming"
+                  ? "bg-gradient-to-br from-emerald-400 via-teal-400 to-emerald-500 shadow-emerald-500/25 ring-emerald-400/50"
+                  : "bg-gradient-to-br from-amber-400 to-amber-500 shadow-amber-500/20 ring-amber-400/40"
+              }`}
+            >
+              {appMode === "gaming" ? (
+                <Gamepad2 className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
+              ) : (
+                <Bookmark className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
+              )}
             </div>
             <div>
-              <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-zinc-100 flex items-center gap-2">
-                <span>Bucklist</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/90 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded-md hidden sm:inline-block">
-                  Cinema
-                </span>
-              </h1>
-              <p className="text-[11px] text-zinc-500 hidden sm:block font-medium">Personal Movie & Series Tracker</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-zinc-100 flex items-center gap-2">
+                  <span>Bucklist</span>
+                </h1>
+                {/* Interactive Mode Switcher Badge */}
+                <button
+                  id="media-mode-toggle-badge"
+                  type="button"
+                  onClick={() => handleToggleAppMode(appMode === "cinema" ? "gaming" : "cinema")}
+                  className={`group inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-200 cursor-pointer shadow-xs border active:scale-95 ${
+                    appMode === "gaming"
+                      ? "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border-emerald-500/30 hover:border-emerald-400/60 ring-1 ring-emerald-500/20"
+                      : "bg-amber-400/10 hover:bg-amber-400/20 text-amber-400/90 hover:text-amber-300 border-amber-400/20 hover:border-amber-400/50 ring-1 ring-amber-400/10"
+                  }`}
+                  title={
+                    appMode === "cinema"
+                      ? "Switch to Gaming Bucklist (Video Games)"
+                      : "Switch to Cinema Bucklist (Movies & Shows)"
+                  }
+                >
+                  {appMode === "gaming" ? (
+                    <Gamepad2 className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  ) : (
+                    <Film className="w-3 h-3 text-amber-400 group-hover:scale-110 transition-transform" />
+                  )}
+                  <span>{appMode === "gaming" ? "Gaming" : "Cinema"}</span>
+                  <ArrowUpDown className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity ml-0.5" />
+                </button>
+              </div>
+              <p className="text-[11px] text-zinc-500 hidden sm:block font-medium">
+                {appMode === "gaming"
+                  ? "Personal Video Game Backlog & Tracker"
+                  : "Personal Movie & Series Tracker"}
+              </p>
             </div>
           </div>
 
@@ -2256,6 +2383,7 @@ export default function App() {
             onUpdateWatchedDate={handleUpdateWatchedDate}
             onOpenTvDrawer={(item) => setActiveTvDrawerMovie({ ...item, media_type: "tv" })}
             tvProgressMap={tvProgressMap}
+            appMode={appMode}
           />
         ) : (tab === "towatch" ? displayMovies : displayWatched).length === 0 ? (
           <div
@@ -2263,13 +2391,21 @@ export default function App() {
             className="w-full py-16 flex flex-col items-center justify-center text-center px-4"
           >
             <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-zinc-600">
-              <Film className="w-8 h-8" />
+              {appMode === "gaming" ? (
+                <Gamepad2 className="w-8 h-8" />
+              ) : (
+                <Film className="w-8 h-8" />
+              )}
             </div>
             <h3 className="text-base font-semibold text-zinc-300 mb-1">
               {selectedGenre || selectedPlatform
                 ? "No matching titles found"
                 : tab === "towatch"
-                ? "Your watchlist is empty"
+                ? appMode === "gaming"
+                  ? "Your game backlog is empty"
+                  : "Your watchlist is empty"
+                : appMode === "gaming"
+                ? "No played games yet"
                 : watchedCategory === "movies"
                 ? "No watched movies yet"
                 : watchedCategory === "series"
@@ -2280,9 +2416,13 @@ export default function App() {
             </h3>
             <p className="text-xs text-zinc-500 max-w-sm mb-4">
               {selectedGenre || selectedPlatform
-                ? "Try adjusting or resetting your active OTT and Genre filters above."
+                ? "Try adjusting or resetting your active filters above."
                 : tab === "towatch"
-                ? "Search for any movie or TV show above to build your personal bucket list."
+                ? appMode === "gaming"
+                  ? "Search for any video game above to build your personal gaming bucklist."
+                  : "Search for any movie or TV show above to build your personal bucket list."
+                : appMode === "gaming"
+                ? "When you finish playing a game, tap 'Mark as Played' to review and rate it!"
                 : watchedCategory === "movies"
                 ? "Movies you mark as watched will be organized here."
                 : watchedCategory === "series"
@@ -2312,7 +2452,7 @@ export default function App() {
                 className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>Add your first title</span>
+                <span>{appMode === "gaming" ? "Add your first game" : "Add your first title"}</span>
               </button>
             ) : null}
           </div>
@@ -2392,6 +2532,7 @@ export default function App() {
               setIsBatchMode(false);
               setSelectedMovieIds([]);
             }}
+            appMode={appMode}
           />
         ) : (
           <div id="floating-navigation" className="fixed bottom-4 sm:bottom-6 left-0 right-0 flex justify-center px-4 z-40 pointer-events-none pb-[env(safe-area-inset-bottom,0px)]">
@@ -2406,8 +2547,14 @@ export default function App() {
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
                 }`}
               >
-                <Film className="w-4 h-4 shrink-0" />
-                <span className="truncate">To Watch ({movies.length})</span>
+                {appMode === "gaming" ? (
+                  <Gamepad2 className="w-4 h-4 shrink-0" />
+                ) : (
+                  <Film className="w-4 h-4 shrink-0" />
+                )}
+                <span className="truncate">
+                  {appMode === "gaming" ? `To Play (${movies.length})` : `To Watch (${movies.length})`}
+                </span>
               </button>
 
               <button
@@ -2421,7 +2568,9 @@ export default function App() {
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span className="truncate">Watched ({watched.length})</span>
+                <span className="truncate">
+                  {appMode === "gaming" ? `Played (${watched.length})` : `Watched (${watched.length})`}
+                </span>
               </button>
 
               {blendEnabled && (
@@ -2500,180 +2649,203 @@ export default function App() {
                   {/* Header Info */}
                   <div className="flex gap-3.5 sm:gap-4 items-start mb-4">
                     <img
-                      src={getPosterUrl(detailMovie.poster_path) || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"}
+                      src={
+                        getPosterUrl(detailMovie.poster_path) ||
+                        (appMode === "gaming" || detailMovie.media_type === "game"
+                          ? "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=300&auto=format&fit=crop&q=60"
+                          : "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=300&auto=format&fit=crop&q=60")
+                      }
                       alt={detailMovie.title}
                       className="w-18 sm:w-24 h-26 sm:h-36 object-cover rounded-xl bg-zinc-800 shadow-xl border border-zinc-800 shrink-0"
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.dataset.failed) {
+                          target.dataset.failed = "true";
+                          target.src =
+                            appMode === "gaming" || detailMovie.media_type === "game"
+                              ? "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=300&auto=format&fit=crop&q=60"
+                              : "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=300&auto=format&fit=crop&q=60";
+                        }
+                      }}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                          {isItemTv(detailMovie) ? "TV Series" : "Movie"}
-                        </span>
-                        {detailMovie.release_year && (
-                          <span className="text-xs text-zinc-400 font-medium">
-                            {detailMovie.release_year}
-                          </span>
-                        )}
-                        {detailExtra?.runtime && (
-                          <span className="text-xs text-zinc-400 font-medium">
-                            • {detailExtra.runtime}
-                          </span>
-                        )}
-                      </div>
+                      {(() => {
+                        const isDetailGame = appMode === "gaming" || detailMovie.media_type === "game";
+                        return (
+                          <>
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                {isDetailGame ? "Game" : isItemAnime(detailMovie) ? "Anime" : isItemTv(detailMovie) ? "TV Series" : "Movie"}
+                              </span>
+                              {detailMovie.release_year && (
+                                <span className="text-xs text-zinc-400 font-medium">
+                                  {detailMovie.release_year}
+                                </span>
+                              )}
+                              {detailExtra?.runtime && (
+                                <span className="text-xs text-zinc-400 font-medium">
+                                  • {detailExtra.runtime}
+                                </span>
+                              )}
+                            </div>
 
-                      <h2 className="text-base sm:text-xl font-bold text-zinc-100 leading-tight">
-                        {detailMovie.title}
-                      </h2>
+                            <h2 className="text-base sm:text-xl font-bold text-zinc-100 leading-tight">
+                              {detailMovie.title}
+                            </h2>
 
-                      {/* Rating */}
-                      {detailExtra?.voteAverage && detailExtra.voteAverage > 0 && (
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                          <span className="text-xs font-bold text-amber-400">
-                            {detailExtra.voteAverage} / 10
-                          </span>
-                          {detailExtra.voteCount && (
-                            <span className="text-[11px] text-zinc-500">
-                              ({detailExtra.voteCount.toLocaleString()} votes)
-                            </span>
-                          )}
-                        </div>
-                      )}
+                            {/* Rating */}
+                            {detailExtra?.voteAverage && detailExtra.voteAverage > 0 && (
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                                <span className="text-xs font-bold text-amber-400">
+                                  {detailExtra.voteAverage} / 10
+                                </span>
+                                {detailExtra.voteCount && (
+                                  <span className="text-[11px] text-zinc-500">
+                                    ({detailExtra.voteCount.toLocaleString()} votes)
+                                  </span>
+                                )}
+                              </div>
+                            )}
 
-                      {/* Dynamic Action Buttons based on item's state */}
-                      {isDetailInWatched ? (
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
-                            <Check className="w-3.5 h-3.5" />
-                            <span>
-                              Watched {isDetailInWatched.rating ? `(${isDetailInWatched.rating}★)` : ""}
-                              {isDetailInWatched.watched_date ? ` • ${isDetailInWatched.watched_date}` : ""}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleOpenWatchedModal(isDetailInWatched, isDetailInWatched.rating || 5);
-                            }}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-500/25 transition-colors cursor-pointer"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Edit Rating</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleMoveToWatchlist(isDetailInWatched);
-                            }}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700 px-2 py-0.5 rounded-md border border-zinc-700 transition-colors cursor-pointer"
-                            title="Unmark watched and move back to To Watch"
-                          >
-                            <Bookmark className="w-3 h-3" />
-                            <span>Undo Watched</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAddToCollectionMovie(isDetailInWatched);
-                            }}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-300 hover:text-amber-400 bg-zinc-800/80 hover:bg-zinc-750 px-2 py-0.5 rounded-md border border-zinc-700 transition-colors cursor-pointer"
-                            title="Add to custom collection"
-                          >
-                            <FolderPlus className="w-3 h-3 text-amber-400" />
-                            <span>Collection</span>
-                          </button>
-                        </div>
-                      ) : isDetailInWatchlist ? (
-                        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-                          {!isItemTv(detailMovie) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleOpenWatchedModal(isDetailInWatchlist, 5);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow-sm cursor-pointer"
-                            >
-                              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                              <span>Mark as Watched</span>
-                            </button>
-                          )}
-                          <PriorityBadge
-                            priority={isDetailInWatchlist.priority || "normal"}
-                            size="sm"
-                            interactive={true}
-                            showDropdownArrow={true}
-                            onSelectPriority={(lvl) => handleUpdatePriority(isDetailInWatchlist, lvl)}
-                            className="px-2.5 py-1.5 rounded-xl cursor-pointer"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAddToCollectionMovie(isDetailInWatchlist);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-amber-400 border border-zinc-800 text-xs font-semibold transition-colors cursor-pointer"
-                            title="Add to custom collection"
-                          >
-                            <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Collection</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleDelete(isDetailInWatchlist.id);
-                              setDetailMovie(null);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 border border-zinc-800 hover:border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
-                            title="Remove from Watchlist"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Remove</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const itemAsSearch: SearchResult = {
-                                tmdb_id: detailMovie.tmdb_id,
-                                title: detailMovie.title,
-                                poster_path: detailMovie.poster_path,
-                                release_year: detailMovie.release_year,
-                                media_type: isItemTv(detailMovie) ? "tv" : "movie",
-                                genres: detailMovie.genres || [],
-                                platforms: detailMovie.platforms || [],
-                                overview: "overview" in detailMovie ? detailMovie.overview : detailExtra?.overview || "",
-                              };
-                              await handleToggleWatchlist(itemAsSearch);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-all shadow-sm cursor-pointer active:scale-95"
-                          >
-                            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>To Watch</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const itemAsSearch: SearchResult = {
-                                tmdb_id: detailMovie.tmdb_id,
-                                title: detailMovie.title,
-                                poster_path: detailMovie.poster_path,
-                                release_year: detailMovie.release_year,
-                                media_type: isItemTv(detailMovie) ? "tv" : "movie",
-                                genres: detailMovie.genres || [],
-                                platforms: detailMovie.platforms || [],
-                                overview: "overview" in detailMovie ? detailMovie.overview : detailExtra?.overview || "",
-                              };
-                              handleToggleWatched(itemAsSearch);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 text-xs font-semibold transition-all cursor-pointer active:scale-95"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Mark Watched</span>
-                          </button>
-                        </div>
-                      )}
+                            {/* Dynamic Action Buttons based on item's state */}
+                            {isDetailInWatched ? (
+                              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>
+                                    {isDetailGame ? "Played" : "Watched"} {isDetailInWatched.rating ? `(${isDetailInWatched.rating}★)` : ""}
+                                    {isDetailInWatched.watched_date ? ` • ${isDetailInWatched.watched_date}` : ""}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleOpenWatchedModal(isDetailInWatched, isDetailInWatched.rating || 5);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-500/25 transition-colors cursor-pointer"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Edit Rating</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleMoveToWatchlist(isDetailInWatched);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700 px-2 py-0.5 rounded-md border border-zinc-700 transition-colors cursor-pointer"
+                                  title={isDetailGame ? "Unmark played and move back to Backlog" : "Unmark watched and move back to To Watch"}
+                                >
+                                  <Bookmark className="w-3 h-3" />
+                                  <span>{isDetailGame ? "Undo Played" : "Undo Watched"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAddToCollectionMovie(isDetailInWatched);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-300 hover:text-amber-400 bg-zinc-800/80 hover:bg-zinc-750 px-2 py-0.5 rounded-md border border-zinc-700 transition-colors cursor-pointer"
+                                  title="Add to custom collection"
+                                >
+                                  <FolderPlus className="w-3 h-3 text-amber-400" />
+                                  <span>Collection</span>
+                                </button>
+                              </div>
+                            ) : isDetailInWatchlist ? (
+                              <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                                {!isItemTv(detailMovie) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleOpenWatchedModal(isDetailInWatchlist, 5);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow-sm cursor-pointer"
+                                  >
+                                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                                    <span>{isDetailGame ? "Mark as Played" : "Mark as Watched"}</span>
+                                  </button>
+                                )}
+                                <PriorityBadge
+                                  priority={isDetailInWatchlist.priority || "normal"}
+                                  size="sm"
+                                  interactive={true}
+                                  showDropdownArrow={true}
+                                  appMode={appMode}
+                                  onSelectPriority={(lvl) => handleUpdatePriority(isDetailInWatchlist, lvl)}
+                                  className="px-2.5 py-1.5 rounded-xl cursor-pointer"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAddToCollectionMovie(isDetailInWatchlist);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-amber-400 border border-zinc-800 text-xs font-semibold transition-colors cursor-pointer"
+                                  title="Add to custom collection"
+                                >
+                                  <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>Collection</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleDelete(isDetailInWatchlist.id);
+                                    setDetailMovie(null);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 border border-zinc-800 hover:border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                                  title={isDetailGame ? "Remove from Backlog" : "Remove from Watchlist"}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const itemAsSearch: SearchResult = {
+                                      tmdb_id: detailMovie.tmdb_id,
+                                      title: detailMovie.title,
+                                      poster_path: detailMovie.poster_path,
+                                      release_year: detailMovie.release_year,
+                                      media_type: isItemTv(detailMovie) ? "tv" : "movie",
+                                      genres: detailMovie.genres || [],
+                                      platforms: detailMovie.platforms || [],
+                                      overview: "overview" in detailMovie ? detailMovie.overview : detailExtra?.overview || "",
+                                    };
+                                    await handleToggleWatchlist(itemAsSearch);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-all shadow-sm cursor-pointer active:scale-95"
+                                >
+                                  <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                                  <span>{isDetailGame ? "To Backlog" : "To Watch"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const itemAsSearch: SearchResult = {
+                                      tmdb_id: detailMovie.tmdb_id,
+                                      title: detailMovie.title,
+                                      poster_path: detailMovie.poster_path,
+                                      release_year: detailMovie.release_year,
+                                      media_type: isItemTv(detailMovie) ? "tv" : "movie",
+                                      genres: detailMovie.genres || [],
+                                      platforms: detailMovie.platforms || [],
+                                      overview: "overview" in detailMovie ? detailMovie.overview : detailExtra?.overview || "",
+                                    };
+                                    handleToggleWatched(itemAsSearch);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 text-xs font-semibold transition-all cursor-pointer active:scale-95"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>{isDetailGame ? "Mark Played" : "Mark Watched"}</span>
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
 
                       {/* Open TV Seasons & Episode Drawer button */}
                       {isItemTv(detailMovie) && (
@@ -2893,6 +3065,7 @@ export default function App() {
         isOpen={showFilters}
         onClose={() => setShowFilters(false)}
         tab={tab}
+        appMode={appMode}
         selectedPriorityFilter={selectedPriorityFilter}
         onSelectPriority={(p) => setSelectedPriorityFilter(p)}
         priorityCounts={priorityCounts}
@@ -2932,14 +3105,14 @@ export default function App() {
           type="button"
           onClick={() => setIsSearchDrawerOpen(true)}
           className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:right-8 z-40 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 w-12 h-12 sm:w-auto sm:h-auto sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-amber-500/30 border border-amber-400/60 font-bold text-sm tracking-tight cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group animate-in fade-in duration-150 pb-[env(safe-area-inset-bottom,0px)]"
-          title="Search & Add to Bucklist (+)"
-          aria-label="Add Movie or Series"
+          title={appMode === "gaming" ? "Search & Add Games (+)" : "Search & Add to Bucklist (+)"}
+          aria-label={appMode === "gaming" ? "Add Game" : "Add Movie or Series"}
         >
           <div className="w-6 h-6 rounded-full flex items-center justify-center group-hover:rotate-90 transition-transform duration-200 shrink-0">
             <Plus className="w-5 h-5 text-zinc-950 stroke-[2.5]" />
           </div>
           <span className="font-extrabold text-xs sm:text-sm hidden sm:inline whitespace-nowrap pr-0.5">
-            Add Title
+            {appMode === "gaming" ? "Add Game" : "Add Title"}
           </span>
         </button>
       )}
@@ -2949,6 +3122,7 @@ export default function App() {
         isOpen={Boolean(priorityModalMovie)}
         movie={priorityModalMovie}
         initialPriority={priorityModalInitial}
+        appMode={appMode}
         onClose={() => setPriorityModalMovie(null)}
         onSelectPriority={handleSelectPriorityAndAdd}
       />
@@ -2957,6 +3131,7 @@ export default function App() {
       <SearchAddDrawer
         isOpen={isSearchDrawerOpen}
         onClose={() => setIsSearchDrawerOpen(false)}
+        appMode={appMode}
         onToggleWatchlist={handleToggleWatchlist}
         onToggleWatched={handleToggleWatched}
         onAddToWatchlist={handleAddToWatchlist}
@@ -2973,6 +3148,7 @@ export default function App() {
       <UniversalSearchDrawer
         isOpen={isUniversalSearchOpen}
         onClose={() => setIsUniversalSearchOpen(false)}
+        appMode={appMode}
         movies={movies}
         watched={watched}
         existingWatchlistIds={existingWatchlistIds}
@@ -2984,7 +3160,7 @@ export default function App() {
         onToggleWatched={handleAddToWatched}
       />
 
-      {/* Rate & Mark Watched Modal / Bottom Sheet - Highest Priority (z-[100]) Above All Drawers */}
+      {/* Rate & Mark Watched / Played Modal / Bottom Sheet - Highest Priority (z-[100]) Above All Drawers */}
       {watchedModalMovie && (
         <div
           id="mark-watched-modal-backdrop"
@@ -2998,7 +3174,11 @@ export default function App() {
           >
             <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-4" />
             <h3 className="text-lg font-bold text-zinc-100">
-              {watchedModalMovie.watched ? "Edit Your Rating" : "Rate & Mark Watched"}
+              {watchedModalMovie.watched
+                ? "Edit Your Rating"
+                : appMode === "gaming"
+                ? "Rate & Mark Played"
+                : "Rate & Mark Watched"}
             </h3>
             <p className="text-sm text-zinc-400 mt-1 mb-6 font-medium truncate">
               {watchedModalMovie.title}
@@ -3032,16 +3212,18 @@ export default function App() {
               </div>
             </div>
 
-            {/* Date & Watch Venue Row: Left: Date (Watched Today) | Right: Venue (OTT / Theatre / Other) */}
+            {/* Date & Watch / Play Venue Row */}
             <div className="flex items-center justify-center gap-2 mb-6 flex-wrap">
               <DatePickerPopover
                 value={userWatchedDate}
                 onChange={setUserWatchedDate}
+                appMode={appMode}
               />
               <WatchVenuePopover
                 venue={userWatchedVenue}
                 platform={userWatchedPlatform}
                 moviePlatforms={watchedModalMovie.platforms}
+                appMode={appMode}
                 onChange={(v, p) => {
                   setUserWatchedVenue(v);
                   setUserWatchedPlatform(p);

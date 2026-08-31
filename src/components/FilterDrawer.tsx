@@ -12,11 +12,13 @@ import {
   CalendarDays,
 } from "lucide-react";
 import {
-  PriorityLevel,
+  type PriorityLevel,
+  type WatchedCategory,
+  type TimelinePeriod,
+  type AppMode,
   PRIORITY_CONFIGS,
   PRIORITY_ORDER,
-  WatchedCategory,
-  TimelinePeriod,
+  getPriorityLabel,
 } from "../types";
 import { getPlatformAccentTheme } from "./OttBadge";
 
@@ -24,6 +26,7 @@ interface FilterDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   tab: "towatch" | "watched" | "blend" | "settings";
+  appMode?: AppMode;
   selectedPriorityFilter: PriorityLevel | "all";
   onSelectPriority: (priority: PriorityLevel | "all") => void;
   priorityCounts: {
@@ -61,6 +64,7 @@ export function FilterDrawer({
   isOpen,
   onClose,
   tab,
+  appMode = "cinema",
   selectedPriorityFilter,
   onSelectPriority,
   priorityCounts,
@@ -186,7 +190,7 @@ export function FilterDrawer({
                   <span>Priority</span>
                   {selectedPriorityFilter !== "all" && (
                     <span className="text-[10px] lowercase bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full font-medium">
-                      {PRIORITY_CONFIGS[selectedPriorityFilter].shortLabel}
+                      {getPriorityLabel(selectedPriorityFilter, appMode)}
                     </span>
                   )}
                 </div>
@@ -204,7 +208,9 @@ export function FilterDrawer({
                     onClick={() => onSelectPriority("all")}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       selectedPriorityFilter === "all"
-                        ? "bg-amber-400 text-zinc-950 font-bold shadow-xs"
+                        ? appMode === "gaming"
+                          ? "bg-emerald-400 text-zinc-950 font-bold shadow-xs"
+                          : "bg-amber-400 text-zinc-950 font-bold shadow-xs"
                         : "bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 border border-zinc-800/50"
                     }`}
                   >
@@ -221,6 +227,7 @@ export function FilterDrawer({
                     const cfg = PRIORITY_CONFIGS[lvl];
                     const count = priorityCounts[lvl];
                     const isSelected = selectedPriorityFilter === lvl;
+                    const dynamicLabel = getPriorityLabel(lvl, appMode);
 
                     return (
                       <button
@@ -234,7 +241,7 @@ export function FilterDrawer({
                             : "bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 border border-zinc-800/50"
                         }`}
                       >
-                        <span>{cfg.shortLabel}</span>
+                        <span>{dynamicLabel}</span>
                         <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                           isSelected ? "bg-zinc-950/30 text-current" : "bg-zinc-800 text-zinc-400"
                         }`}>
@@ -542,7 +549,7 @@ export function FilterDrawer({
                   onClick={() => setIsPlatformOpen(!isPlatformOpen)}
                   className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-zinc-400 uppercase hover:text-zinc-200 transition-colors cursor-pointer group"
                 >
-                  <span>Streaming Platform</span>
+                  <span>{appMode === "gaming" ? "Gaming Platform" : "Streaming Platform"}</span>
                   {selectedPlatform && (
                     <span className="text-[10px] lowercase bg-zinc-800 text-zinc-200 px-1.5 py-0.2 rounded-full font-medium">
                       {selectedPlatform}

@@ -15,8 +15,10 @@ import {
 import {
   type WatchlistMovie,
   type PriorityLevel,
+  type AppMode,
   PRIORITY_CONFIGS,
   PRIORITY_ORDER,
+  getPriorityLabel,
 } from "../types";
 
 interface BatchManagementBarProps {
@@ -32,6 +34,7 @@ interface BatchManagementBarProps {
   onBatchAddGenre?: (genre: string) => void;
   onBatchSetPriority?: (priority: PriorityLevel) => void;
   onExitBatchMode: () => void;
+  appMode?: AppMode;
 }
 
 export function BatchManagementBar({
@@ -47,6 +50,7 @@ export function BatchManagementBar({
   onBatchAddGenre,
   onBatchSetPriority,
   onExitBatchMode,
+  appMode = "cinema",
 }: BatchManagementBarProps) {
   const [showRatingMenu, setShowRatingMenu] = useState(false);
   const [showTagMenu, setShowTagMenu] = useState(false);
@@ -55,6 +59,7 @@ export function BatchManagementBar({
 
   const count = selectedIds.length;
   const isAllSelected = count > 0 && count === totalCount;
+  const isGaming = appMode === "gaming";
 
   return (
     <div
@@ -92,7 +97,7 @@ export function BatchManagementBar({
 
         {/* Action Buttons Row */}
         <div className="flex items-center gap-2 pt-1 border-t border-zinc-800/80 flex-wrap sm:flex-nowrap">
-          {/* Mark as Watched button (if on towatch tab) */}
+          {/* Mark as Watched / Played button (if on towatch tab) */}
           {!isWatchedTab && onBatchMarkWatched && (
             <div className="relative flex-1 sm:flex-initial">
               <button
@@ -102,12 +107,12 @@ export function BatchManagementBar({
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:pointer-events-none text-zinc-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                <span>Mark Watched</span>
+                <span>{isGaming ? "Mark Played" : "Mark Watched"}</span>
               </button>
             </div>
           )}
 
-          {/* Move to Watchlist (if on watched tab) */}
+          {/* Move to Watchlist / Backlog (if on watched tab) */}
           {isWatchedTab && onBatchMoveToWatchlist && (
             <button
               type="button"
@@ -116,7 +121,7 @@ export function BatchManagementBar({
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:pointer-events-none text-zinc-200 font-bold text-xs transition-colors cursor-pointer"
             >
               <BookmarkPlus className="w-4 h-4 text-amber-400" />
-              <span>To Watchlist</span>
+              <span>{isGaming ? "To Backlog" : "To Watchlist"}</span>
             </button>
           )}
 
@@ -145,11 +150,12 @@ export function BatchManagementBar({
               {showPriorityMenu && (
                 <div className="absolute bottom-full mb-2 left-0 sm:left-auto sm:right-0 w-56 bg-zinc-950 border border-zinc-800 rounded-2xl p-2.5 shadow-2xl z-50 animate-in fade-in zoom-in-95">
                   <div className="text-xs font-bold text-zinc-300 mb-2 px-1">
-                    Set Priority for {count} title{count === 1 ? "" : "s"}:
+                    Set Priority for {count} {isGaming ? "game" : "title"}{count === 1 ? "" : "s"}:
                   </div>
                   <div className="space-y-1">
                     {PRIORITY_ORDER.map((level) => {
                       const cfg = PRIORITY_CONFIGS[level];
+                      const label = getPriorityLabel(level, appMode);
                       return (
                         <button
                           key={level}
@@ -160,7 +166,7 @@ export function BatchManagementBar({
                           }}
                           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-colors text-left hover:bg-zinc-850 cursor-pointer ${cfg.badgeText} border border-transparent hover:border-zinc-800`}
                         >
-                          <span className="font-bold leading-tight text-zinc-200">{cfg.label}</span>
+                          <span className="font-bold leading-tight text-zinc-200">{label}</span>
                         </button>
                       );
                     })}

@@ -1,3 +1,5 @@
+export type AppMode = "cinema" | "gaming";
+
 export type PriorityLevel = "must_watch" | "very_interested" | "wanna_see" | "maybe_later";
 
 export interface PriorityConfig {
@@ -89,13 +91,47 @@ export function getPriorityConfig(priority?: PriorityLevel | string | null): Pri
   return PRIORITY_CONFIGS[norm] || PRIORITY_CONFIGS.wanna_see;
 }
 
+export function getPriorityLabel(priority?: PriorityLevel | string | null, mode: AppMode = "cinema"): string {
+  const norm = normalizePriority(priority);
+  if (mode === "gaming") {
+    switch (norm) {
+      case "must_watch":
+        return "Must Play";
+      case "very_interested":
+        return "Very Interested";
+      case "wanna_see":
+        return "Wanna Play";
+      case "maybe_later":
+        return "Maybe Later";
+    }
+  }
+  return PRIORITY_CONFIGS[norm]?.label || "Wanna See";
+}
+
+export function getPriorityDescription(priority?: PriorityLevel | string | null, mode: AppMode = "cinema"): string {
+  const norm = normalizePriority(priority);
+  if (mode === "gaming") {
+    switch (norm) {
+      case "must_watch":
+        return "Highest priority • Play next";
+      case "very_interested":
+        return "High priority • Hyped to play";
+      case "wanna_see":
+        return "Standard backlog item";
+      case "maybe_later":
+        return "Low priority • When on sale / mood";
+    }
+  }
+  return PRIORITY_CONFIGS[norm]?.description || "Standard watchlist item";
+}
+
 export interface WatchlistMovie {
   id: string;
   tmdb_id: number;
   title: string;
   poster_path: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv";
+  media_type?: "movie" | "tv" | "game" | "anime";
   genres: string[];
   platforms: string[];
   priority?: PriorityLevel;
@@ -105,6 +141,7 @@ export interface WatchlistMovie {
   watched_platform?: string | null;
   rating: number | null;
   created_at: string;
+  metacritic?: number | null;
 }
 
 export interface SearchResult {
@@ -112,10 +149,12 @@ export interface SearchResult {
   title: string;
   poster_path: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv";
+  media_type?: "movie" | "tv" | "game" | "anime";
   overview: string | null;
   genres: string[];
   platforms: string[];
+  metacritic?: number | null;
+  rating?: number | null;
 }
 
 export interface MovieDetailExtra {
@@ -223,7 +262,7 @@ export interface BlendMovie {
   poster_path: string | null;
   backdrop_path?: string | null;
   release_year: string | null;
-  media_type?: "movie" | "tv";
+  media_type?: "movie" | "tv" | "game" | "anime";
   genres: string[];
   platforms: string[];
   runtime?: string;
@@ -285,6 +324,8 @@ export interface BucklistBackupData {
   appName?: string;
   exportedAt: string;
   watchlist: WatchlistMovie[];
+  gamesWatchlist?: WatchlistMovie[];
+  appMode?: AppMode;
   collections?: MovieCollection[];
   blends?: Blend[];
   tvProgress?: Record<

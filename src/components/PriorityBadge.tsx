@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import {
+  type AppMode,
   type PriorityLevel,
   PRIORITY_CONFIGS,
   PRIORITY_ORDER,
   getPriorityConfig,
+  getPriorityLabel,
 } from "../types";
 
 interface PriorityBadgeProps {
@@ -16,6 +18,7 @@ interface PriorityBadgeProps {
   showDropdownArrow?: boolean;
   showFullLabel?: boolean;
   showDot?: boolean;
+  appMode?: AppMode;
 }
 
 export function PriorityBadge({
@@ -27,11 +30,13 @@ export function PriorityBadge({
   showDropdownArrow = false,
   showFullLabel = true,
   showDot = false,
+  appMode = "cinema",
 }: PriorityBadgeProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const currentConfig = getPriorityConfig(priority);
+  const currentLabel = getPriorityLabel(priority, appMode);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -63,7 +68,7 @@ export function PriorityBadge({
         />
       )}
       <span className="whitespace-nowrap font-semibold">
-        {showFullLabel ? currentConfig.label : currentConfig.shortLabel}
+        {showFullLabel ? currentLabel : currentConfig.shortLabel}
       </span>
       {interactive && showDropdownArrow && (
         <ChevronDown className="w-2.5 h-2.5 opacity-60 ml-0.5" />
@@ -75,7 +80,7 @@ export function PriorityBadge({
     return (
       <span
         className={`inline-flex items-center font-medium border shadow-2xs ${currentConfig.badgeBg} ${currentConfig.badgeBorder} ${currentConfig.badgeText} ${sizeClasses[size]} ${className}`}
-        title={`Priority: ${currentConfig.label}`}
+        title={`Priority: ${currentLabel}`}
       >
         {badgeContent}
       </span>
@@ -109,6 +114,7 @@ export function PriorityBadge({
             {PRIORITY_ORDER.map((levelKey) => {
               const cfg = PRIORITY_CONFIGS[levelKey];
               const isSelected = (priority || "wanna_see") === levelKey;
+              const itemLabel = getPriorityLabel(levelKey, appMode);
 
               return (
                 <button
@@ -125,7 +131,7 @@ export function PriorityBadge({
                       : "text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
                   }`}
                 >
-                  <span className="leading-tight font-semibold">{cfg.label}</span>
+                  <span className="leading-tight font-semibold">{itemLabel}</span>
                   {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
                 </button>
               );

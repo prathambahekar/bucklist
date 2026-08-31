@@ -5,6 +5,7 @@ import {
   Loader2,
   Film,
   Tv,
+  Gamepad2,
   Star,
   CheckCircle2,
   Bookmark,
@@ -12,8 +13,9 @@ import {
   Sparkles,
   ArrowRight,
 } from "lucide-react";
-import type { SearchResult, WatchlistMovie } from "../types";
+import type { SearchResult, WatchlistMovie, AppMode } from "../types";
 import { searchMovies, getPosterUrl } from "../lib/api";
+import { searchGames } from "../lib/rawgApi";
 import { OttBadge } from "./OttBadge";
 
 interface UniversalSearchDrawerProps {
@@ -26,6 +28,7 @@ interface UniversalSearchDrawerProps {
   onToggleWatched?: (item: SearchResult) => Promise<void> | void;
   existingWatchlistIds: Set<number>;
   existingWatchedIds: Set<number>;
+  appMode?: AppMode;
 }
 
 type SearchFilterScope = "all" | "library" | "movies" | "tv";
@@ -38,13 +41,16 @@ export function UniversalSearchDrawer({
   onSelectMovie,
   existingWatchlistIds,
   existingWatchedIds,
+  appMode = "cinema",
 }: UniversalSearchDrawerProps) {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchFilterScope>("all");
-  const [tmdbResults, setTmdbResults] = useState<SearchResult[]>([]);
+  const [externalResults, setExternalResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<number | null>(null);
+
+  const isGaming = appMode === "gaming";
 
   // Auto focus input on open
   useEffect(() => {
@@ -54,7 +60,7 @@ export function UniversalSearchDrawer({
       }, 100);
     } else {
       setQuery("");
-      setTmdbResults([]);
+      setExternalResults([]);
       setIsLoading(false);
     }
   }, [isOpen]);
@@ -87,14 +93,16 @@ export function UniversalSearchDrawer({
       );
       const yearMatch = (item.release_year || "").includes(trimmed);
 
-      if (scope === "movies" && item.media_type === "tv") return false;
-      if (scope === "tv" && item.media_type !== "tv") return false;
+      if (!isGaming) {
+        if (scope === "movies" && item.media_type === "tv") return false;
+        if (scope === "tv" && item.media_type !== "tv") return false;
+      }
 
       return titleMatch || genreMatch || yearMatch;
     });
-  }, [query, movies, watched, scope]);
+  }, [query, movies, watched, scope, isGaming]);
 
-  // TMDB live search with debouncing
+  // External live search with debouncing (TMDB for cinema, RAWG for gaming)
   useEffect(() => {
     const trimmed = query.trim();
     if (debounceTimerRef.current) {
@@ -102,30 +110,44 @@ export function UniversalSearchDrawer({
     }
 
     if (!trimmed || scope === "library") {
-      setTmdbResults([]);
+      setExternalResults([]);
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     debounceTimerRef.current = window.setTimeout(() => {
-      searchMovies(trimmed)
-        .then((res) => {
-          let filtered = res;
-          if (scope === "movies") {
-            filtered = res.filter((item) => item.media_type !== "tv");
-          } else if (scope === "tv") {
-            filtered = res.filter((item) => item.media_type === "tv");
-          }
-          setTmdbResults(filtered);
-        })
-        .catch((err) => {
-          console.warn("Universal search query failed:", err);
-          setTmdbResults([]);
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
+      if (isGaming) {
+        searchGames(trimmed)
+          .then((res) => {
+            setExternalResults(res);
+          })
+          .catch((err) => {
+            console.warn("Universal game search query failed:", err);
+            setExternalResults([]);
+          })
+          .finally(() => {
+            setIsLoading(false);
+          });
+      } else {
+        searchMovies(trimmed)
+          .then((res) => {
+            let filtered = res;
+            if (scope === "movies") {
+              filtered = res.filter((item) => item.media_type !== "tv");
+            } else if (scope === "tv") {
+              filtered = res.filter((item) => item.media_type === "tv");
+            }
+            setExternalResults(filtered);
+          })
+          .catch((err) => {
+            console.warn("Universal cinema search query failed:", err);
+            setExternalResults([]);
+          })
+          .finally(() => {
+            setIsLoading(false);
+          });
+      }
     }, 250);
 
     return () => {
@@ -133,7 +155,7 @@ export function UniversalSearchDrawer({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [query, scope]);
+  }, [query, scope, isGaming]);
 
   if (!isOpen) return null;
 
@@ -145,10 +167,16 @@ export function UniversalSearchDrawer({
   const hasQuery = query.trim().length > 0;
   const libraryIds = new Set(libraryMatches.map((m) => m.item.tmdb_id));
 
-  // Filter out TMDB results that are already shown in library matches to avoid duplicates
-  const filteredTmdbResults = tmdbResults.filter(
+  // Filter out external results that are already shown in library matches to avoid duplicates
+  const filteredExternalResults = externalResults.filter(
     (item) => !libraryIds.has(item.tmdb_id)
   );
+
+  const placeholderText = isGaming
+    ? "Search gaming backlog, 500k+ games, genres..."
+    : "Search library, movies, series, or genres...";
+
+  const accentColor = isGaming ? "emerald" : "amber";
 
   return (
     <div
@@ -168,21 +196,25 @@ export function UniversalSearchDrawer({
 
         {/* Clean, Seamless Search Header */}
         <div className="px-4 pt-3 sm:pt-4 pb-2 shrink-0 space-y-3">
-          <div className="flex items-center gap-2.5 bg-zinc-900/90 border border-zinc-800/80 focus-within:border-amber-400/50 rounded-2xl px-3.5 py-2.5 focus-within:ring-1 focus-within:ring-amber-400/20 transition-all">
-            <Search className="w-4 h-4 text-amber-400 shrink-0" />
+          <div className={`flex items-center gap-2.5 bg-zinc-900/90 border border-zinc-800/80 focus-within:border-${accentColor}-400/50 rounded-2xl px-3.5 py-2.5 focus-within:ring-1 focus-within:ring-${accentColor}-400/20 transition-all`}>
+            {isGaming ? (
+              <Gamepad2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <Search className="w-4 h-4 text-amber-400 shrink-0" />
+            )}
             <input
               ref={inputRef}
               id="universal-search-input"
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search library, movies, series, or genres..."
+              placeholder={placeholderText}
               className="w-full bg-transparent text-sm sm:text-base text-zinc-100 placeholder-zinc-500 focus:outline-none font-medium"
               autoComplete="off"
               spellCheck="false"
             />
             {isLoading && (
-              <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+              <Loader2 className={`w-4 h-4 text-${accentColor}-400 animate-spin shrink-0`} />
             )}
             {query && !isLoading && (
               <button
@@ -210,30 +242,56 @@ export function UniversalSearchDrawer({
           </div>
 
           {/* Minimal Scope Filter Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {(
-              [
-                { id: "all", label: "All" },
-                { id: "library", label: "In My Library" },
-                { id: "movies", label: "Movies" },
-                { id: "tv", label: "TV Series" },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                id={`search-scope-${tab.id}`}
-                onClick={() => setScope(tab.id)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  scope === tab.id
-                    ? "bg-amber-500 text-zinc-950 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200 bg-zinc-900/90 hover:bg-zinc-850"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {!isGaming && (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {(
+                [
+                  { id: "all", label: "All" },
+                  { id: "library", label: "In My Library" },
+                  { id: "movies", label: "Movies" },
+                  { id: "tv", label: "TV Series" },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  id={`search-scope-${tab.id}`}
+                  onClick={() => setScope(tab.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    scope === tab.id
+                      ? "bg-amber-500 text-zinc-950 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200 bg-zinc-900/90 hover:bg-zinc-850"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {isGaming && (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {(
+                [
+                  { id: "all", label: "All Games (RAWG)" },
+                  { id: "library", label: "In My Backlog" },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  id={`search-scope-${tab.id}`}
+                  onClick={() => setScope(tab.id as SearchFilterScope)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    scope === tab.id
+                      ? "bg-emerald-500 text-zinc-950 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200 bg-zinc-900/90 hover:bg-zinc-850"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Results Container */}
@@ -246,11 +304,11 @@ export function UniversalSearchDrawer({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between px-1">
                     <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-                      In Your Watchlist
+                      <Bookmark className={`w-3.5 h-3.5 ${isGaming ? "text-emerald-400" : "text-amber-400"}`} />
+                      {isGaming ? "In Your Backlog (To Play)" : "In Your Watchlist (To Watch)"}
                     </span>
                     <span className="text-[11px] text-zinc-500 font-medium">
-                      {movies.length} saved
+                      {movies.length} {isGaming ? "games" : "saved"}
                     </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -270,24 +328,28 @@ export function UniversalSearchDrawer({
                                 alt={movie.title}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                }}
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                                <Film className="w-4 h-4" />
+                                {isGaming ? <Gamepad2 className="w-4 h-4" /> : <Film className="w-4 h-4" />}
                               </div>
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h4 className="text-xs sm:text-sm font-bold text-zinc-200 group-hover:text-amber-400 truncate transition-colors">
+                            <h4 className={`text-xs sm:text-sm font-bold text-zinc-200 ${isGaming ? "group-hover:text-emerald-400" : "group-hover:text-amber-400"} truncate transition-colors`}>
                               {movie.title}
                             </h4>
                             <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-0.5">
                               <span>{movie.release_year || "—"}</span>
                               <span>•</span>
-                              <span className="capitalize">{movie.media_type === "tv" ? "TV" : "Movie"}</span>
+                              <span className="capitalize">{isGaming ? "Game" : (movie.media_type === "tv" ? "TV" : "Movie")}</span>
                             </div>
                           </div>
-                          <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0 mr-1" />
+                          <ArrowRight className={`w-4 h-4 text-zinc-600 ${isGaming ? "group-hover:text-emerald-400" : "group-hover:text-amber-400"} transition-colors shrink-0 mr-1`} />
                         </button>
                       );
                     })}
@@ -301,7 +363,7 @@ export function UniversalSearchDrawer({
                   <div className="flex items-center justify-between px-1">
                     <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      Recently Watched
+                      {isGaming ? "Recently Played" : "Recently Watched"}
                     </span>
                     <span className="text-[11px] text-zinc-500 font-medium">
                       {watched.length} completed
@@ -324,10 +386,14 @@ export function UniversalSearchDrawer({
                                 alt={movie.title}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                }}
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                                <Film className="w-4 h-4" />
+                                {isGaming ? <Gamepad2 className="w-4 h-4" /> : <Film className="w-4 h-4" />}
                               </div>
                             )}
                           </div>
@@ -342,7 +408,7 @@ export function UniversalSearchDrawer({
                                   {movie.rating}
                                 </span>
                               ) : (
-                                <span>Watched</span>
+                                <span>{isGaming ? "Played" : "Watched"}</span>
                               )}
                               <span>•</span>
                               <span>{movie.release_year || "—"}</span>
@@ -358,7 +424,9 @@ export function UniversalSearchDrawer({
 
               {movies.length === 0 && watched.length === 0 && (
                 <div className="text-center py-12 text-zinc-500 text-xs">
-                  Type any title name to instantly search across movies & TV series
+                  {isGaming
+                    ? "Type any game title (e.g. Witcher, Elden Ring, Zelda) to search RAWG"
+                    : "Type any title name to instantly search across movies & TV series"}
                 </div>
               )}
             </div>
@@ -371,9 +439,9 @@ export function UniversalSearchDrawer({
               {libraryMatches.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className={`text-xs font-bold ${isGaming ? "text-emerald-400" : "text-amber-400"} uppercase tracking-wider flex items-center gap-1.5`}>
                       <Bookmark className="w-3.5 h-3.5" />
-                      In Your Library ({libraryMatches.length})
+                      In Your {isGaming ? "Gaming Backlog" : "Library"} ({libraryMatches.length})
                     </span>
                   </div>
                   <div className="space-y-1.5">
@@ -393,33 +461,37 @@ export function UniversalSearchDrawer({
                                   alt={item.title}
                                   className="w-full h-full object-cover"
                                   loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                  }}
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                                  <Film className="w-4 h-4" />
+                                  {isGaming ? <Gamepad2 className="w-4 h-4" /> : <Film className="w-4 h-4" />}
                                 </div>
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <h4 className="text-xs sm:text-sm font-bold text-zinc-100 group-hover:text-amber-400 truncate transition-colors">
+                                <h4 className={`text-xs sm:text-sm font-bold text-zinc-100 ${isGaming ? "group-hover:text-emerald-400" : "group-hover:text-amber-400"} truncate transition-colors`}>
                                   {item.title}
                                 </h4>
                                 {status === "watchlist" ? (
-                                  <span className="text-[10px] bg-amber-400/15 text-amber-400 font-semibold px-2 py-0.5 rounded-full shrink-0">
-                                    To-Watch
+                                  <span className={`text-[10px] ${isGaming ? "bg-emerald-400/15 text-emerald-400" : "bg-amber-400/15 text-amber-400"} font-semibold px-2 py-0.5 rounded-full shrink-0`}>
+                                    {isGaming ? "To Play" : "To-Watch"}
                                   </span>
                                 ) : (
                                   <span className="text-[10px] bg-emerald-400/15 text-emerald-400 font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1">
                                     <Check className="w-2.5 h-2.5 stroke-[2.5]" />
-                                    Watched {item.rating ? `★${item.rating}` : ""}
+                                    {isGaming ? "Played" : "Watched"} {item.rating ? `★${item.rating}` : ""}
                                   </span>
                                 )}
                               </div>
                               <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-1 flex-wrap">
                                 <span>{item.release_year || "—"}</span>
                                 <span>•</span>
-                                <span className="capitalize">{item.media_type === "tv" ? "TV Series" : "Movie"}</span>
+                                <span className="capitalize">{isGaming ? "Game" : (item.media_type === "tv" ? "TV Series" : "Movie")}</span>
                                 {item.genres && item.genres.length > 0 && (
                                   <>
                                     <span>•</span>
@@ -439,7 +511,7 @@ export function UniversalSearchDrawer({
                             </div>
                           </div>
 
-                          <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0 mr-1" />
+                          <ArrowRight className={`w-4 h-4 text-zinc-600 ${isGaming ? "group-hover:text-emerald-400" : "group-hover:text-amber-400"} transition-colors shrink-0 mr-1`} />
                         </div>
                       );
                     })}
@@ -447,33 +519,33 @@ export function UniversalSearchDrawer({
                 </div>
               )}
 
-              {/* Global TMDB Search Results */}
+              {/* Global Search Results */}
               {scope !== "library" && (
                 <div className="space-y-2 pt-1">
-                  {filteredTmdbResults.length > 0 && (
+                  {filteredExternalResults.length > 0 && (
                     <div className="flex items-center justify-between px-1">
                       <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
-                        Explore Titles ({filteredTmdbResults.length})
+                        {isGaming ? "Explore Games (RAWG)" : "Explore Titles"} ({filteredExternalResults.length})
                       </span>
                     </div>
                   )}
 
-                  {isLoading && filteredTmdbResults.length === 0 && (
+                  {isLoading && filteredExternalResults.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-10 text-zinc-500 gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
-                      <span className="text-xs">Searching titles...</span>
+                      <Loader2 className={`w-5 h-5 animate-spin ${isGaming ? "text-emerald-400" : "text-amber-400"}`} />
+                      <span className="text-xs">Searching {isGaming ? "RAWG games..." : "titles..."}</span>
                     </div>
                   )}
 
-                  {!isLoading && filteredTmdbResults.length === 0 && libraryMatches.length === 0 && (
+                  {!isLoading && filteredExternalResults.length === 0 && libraryMatches.length === 0 && (
                     <div className="text-center py-12 text-zinc-500 text-xs">
-                      No matching titles found for &quot;{query}&quot;
+                      No matching {isGaming ? "games" : "titles"} found for &quot;{query}&quot;
                     </div>
                   )}
 
                   <div className="space-y-1.5">
-                    {filteredTmdbResults.map((item) => {
+                    {filteredExternalResults.map((item) => {
                       const inWatchlist = existingWatchlistIds.has(item.tmdb_id);
                       const inWatched = existingWatchedIds.has(item.tmdb_id);
                       const poster = getPosterUrl(item.poster_path);
@@ -492,10 +564,16 @@ export function UniversalSearchDrawer({
                                   alt={item.title}
                                   className="w-full h-full object-cover"
                                   loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                  }}
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                                  {item.media_type === "tv" ? (
+                                  {isGaming ? (
+                                    <Gamepad2 className="w-4 h-4" />
+                                  ) : item.media_type === "tv" ? (
                                     <Tv className="w-4 h-4" />
                                   ) : (
                                     <Film className="w-4 h-4" />
@@ -504,13 +582,21 @@ export function UniversalSearchDrawer({
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h4 className="text-xs sm:text-sm font-bold text-zinc-100 group-hover:text-amber-400 truncate transition-colors">
+                              <h4 className={`text-xs sm:text-sm font-bold text-zinc-100 ${isGaming ? "group-hover:text-emerald-400" : "group-hover:text-amber-400"} truncate transition-colors`}>
                                 {item.title}
                               </h4>
                               <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-0.5 flex-wrap">
                                 <span>{item.release_year || "—"}</span>
                                 <span>•</span>
-                                <span className="capitalize">{item.media_type === "tv" ? "TV Series" : "Movie"}</span>
+                                <span className="capitalize">{isGaming ? "Game" : (item.media_type === "tv" ? "TV Series" : "Movie")}</span>
+                                {item.metacritic && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1 rounded text-[10px]">
+                                      Meta {item.metacritic}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                               {item.platforms && item.platforms.length > 0 && (
                                 <div className="flex items-center gap-1 mt-1.5 flex-wrap">
@@ -524,16 +610,16 @@ export function UniversalSearchDrawer({
 
                           <div className="flex items-center gap-2 shrink-0">
                             {inWatchlist && (
-                              <span className="text-[10px] font-semibold text-amber-400 px-2 py-0.5 bg-amber-400/10 rounded-full">
-                                In List
+                              <span className={`text-[10px] font-semibold ${isGaming ? "text-emerald-400 bg-emerald-400/10" : "text-amber-400 bg-amber-400/10"} px-2 py-0.5 rounded-full`}>
+                                {isGaming ? "In Backlog" : "In List"}
                               </span>
                             )}
                             {inWatched && (
                               <span className="text-[10px] font-semibold text-emerald-400 px-2 py-0.5 bg-emerald-400/10 rounded-full">
-                                Watched
+                                {isGaming ? "Played" : "Watched"}
                               </span>
                             )}
-                            <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors" />
+                            <ArrowRight className={`w-4 h-4 text-zinc-600 ${isGaming ? "group-hover:text-emerald-400" : "group-hover:text-amber-400"} transition-colors`} />
                           </div>
                         </div>
                       );

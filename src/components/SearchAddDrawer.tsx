@@ -12,9 +12,16 @@ import {
   Flame,
   CheckCircle2,
   Star,
+  Gamepad2,
+  Trophy,
+  Swords,
+  Shield,
+  Layers,
+  Sparkle,
 } from "lucide-react";
-import type { SearchResult } from "../types";
+import type { SearchResult, AppMode } from "../types";
 import { searchMovies, fetchCategorySuggestions, getPosterUrl } from "../lib/api";
+import { searchGames, fetchGameCategorySuggestions } from "../lib/rawgApi";
 import { OttBadge } from "./OttBadge";
 
 interface SearchAddDrawerProps {
@@ -28,9 +35,10 @@ interface SearchAddDrawerProps {
   existingWatchedIds: Set<number>;
   addingId: number | null;
   onSelectMovie?: (item: SearchResult) => void;
+  appMode?: AppMode;
 }
 
-type FilterCategory = "all" | "movie" | "tv" | "anime";
+type FilterCategory = "all" | "movie" | "tv" | "anime" | "top" | "rpg" | "action" | "indie" | "strategy";
 
 function isAnimeItem(item: SearchResult): boolean {
   const genres = item.genres || [];
@@ -50,20 +58,30 @@ export function SearchAddDrawer({
   existingWatchedIds,
   addingId,
   onSelectMovie,
+  appMode = "cinema",
 }: SearchAddDrawerProps) {
   const handleWatchlistAction = onToggleWatchlist || onAddToWatchlist;
   const handleWatchedAction = onToggleWatched || onAddToWatched;
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [categorySuggestions, setCategorySuggestions] = useState<
-    Partial<Record<FilterCategory, SearchResult[]>>
+    Partial<Record<string, SearchResult[]>>
   >({});
   const [loading, setLoading] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<FilterCategory>("all");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
   const [fetchError, setFetchError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
+
+  const isGaming = appMode === "gaming";
+
+  // Reset activeCategory when appMode changes
+  useEffect(() => {
+    setActiveCategory("all");
+    setSearchResults([]);
+    setQuery("");
+  }, [appMode]);
 
   // Only auto-focus on desktop devices to avoid opening the mobile virtual keyboard automatically
   useEffect(() => {
@@ -86,16 +104,22 @@ export function SearchAddDrawer({
     }
   }, [isOpen]);
 
-  const loadSuggestions = (cat: FilterCategory) => {
+  const loadSuggestions = (cat: string) => {
     setSuggestionsLoading(true);
     setFetchError(null);
-    fetchCategorySuggestions(cat)
+
+    const promise = isGaming
+      ? fetchGameCategorySuggestions(cat as any)
+      : fetchCategorySuggestions(cat as any);
+
+    promise
       .then((res) => {
-        setCategorySuggestions((prev) => ({ ...prev, [cat]: res }));
+        const cacheKey = `${appMode}_${cat}`;
+        setCategorySuggestions((prev) => ({ ...prev, [cacheKey]: res }));
       })
       .catch((err) => {
         console.warn("Category suggestions fetch failed:", err);
-        setFetchError("Unable to load trending titles. Tap retry to reload.");
+        setFetchError(`Unable to load trending ${isGaming ? "games" : "titles"}. Tap retry to reload.`);
       })
       .finally(() => setSuggestionsLoading(false));
   };
@@ -105,10 +129,11 @@ export function SearchAddDrawer({
     if (!isOpen) return;
     if (query.trim().length >= 2) return;
 
-    if (!categorySuggestions[activeCategory]) {
+    const cacheKey = `${appMode}_${activeCategory}`;
+    if (!categorySuggestions[cacheKey]) {
       loadSuggestions(activeCategory);
     }
-  }, [isOpen, activeCategory, query, categorySuggestions]);
+  }, [isOpen, activeCategory, query, categorySuggestions, appMode]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -136,7 +161,10 @@ export function SearchAddDrawer({
     const curId = ++requestIdRef.current;
     const timer = setTimeout(async () => {
       try {
-        const res = await searchMovies(trimmed);
+        const res = isGaming
+          ? await searchGames(trimmed)
+          : await searchMovies(trimmed);
+
         if (curId === requestIdRef.current) {
           setSearchResults(res);
         }
@@ -144,7 +172,7 @@ export function SearchAddDrawer({
         console.error("Search failed:", err);
         if (curId === requestIdRef.current) {
           setSearchResults([]);
-          setFetchError("Search request timed out or was rate limited. Tap retry to try again.");
+          setFetchError("Search request timed out. Tap retry to try again.");
         }
       } finally {
         if (curId === requestIdRef.current) {
@@ -154,11 +182,11 @@ export function SearchAddDrawer({
     }, 280);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, isGaming]);
 
   // Determine current active list (search results or category suggestions)
   const isSearching = query.trim().length >= 2;
-  const currentSuggestions = categorySuggestions[activeCategory] || [];
+  const currentSuggestions = categorySuggestions[`${appMode}_${activeCategory}`] || [];
 
   // Filter list by category pill when searching
   const filteredList = useMemo(() => {
@@ -166,6 +194,27 @@ export function SearchAddDrawer({
       return currentSuggestions;
     }
     if (activeCategory === "all") return searchResults;
+
+    if (isGaming) {
+      if (activeCategory === "top") {
+        return [...searchResults].sort((a, b) => (b.metacritic || 0) - (a.metacritic || 0));
+      }
+      if (activeCategory === "rpg") {
+        return searchResults.filter((item) => (item.genres || []).some((g) => g.toLowerCase().includes("rpg") || g.toLowerCase().includes("role")));
+      }
+      if (activeCategory === "action") {
+        return searchResults.filter((item) => (item.genres || []).some((g) => g.toLowerCase().includes("action") || g.toLowerCase().includes("shooter")));
+      }
+      if (activeCategory === "indie") {
+        return searchResults.filter((item) => (item.genres || []).some((g) => g.toLowerCase().includes("indie")));
+      }
+      if (activeCategory === "strategy") {
+        return searchResults.filter((item) => (item.genres || []).some((g) => g.toLowerCase().includes("strat") || g.toLowerCase().includes("puzzle")));
+      }
+      return searchResults;
+    }
+
+    // Cinema filtering
     if (activeCategory === "anime") {
       return searchResults.filter((item) => isAnimeItem(item));
     }
@@ -176,7 +225,7 @@ export function SearchAddDrawer({
       return searchResults.filter((item) => item.media_type === "movie" && !isAnimeItem(item));
     }
     return searchResults;
-  }, [isSearching, currentSuggestions, searchResults, activeCategory]);
+  }, [isSearching, currentSuggestions, searchResults, activeCategory, isGaming]);
 
   if (!isOpen) return null;
 
@@ -206,14 +255,24 @@ export function SearchAddDrawer({
           <div className="w-10 h-1 bg-zinc-700/80 rounded-full" />
         </div>
 
-        {/* Drawer Header without yellow icon */}
+        {/* Drawer Header */}
         <div className="px-4 pt-3 pb-2 sm:px-5 sm:pt-4 sm:pb-2 flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-base font-bold text-zinc-100 leading-tight">
-              Add to Bucklist
-            </h2>
-            <p className="text-xs text-zinc-400">
-              Search movies, TV series, or anime on TMDB
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-zinc-100 leading-tight">
+                {isGaming ? "Add Game to Bucklist" : "Add to Bucklist"}
+              </h2>
+              {isGaming && (
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                  <Gamepad2 className="w-3 h-3" />
+                  GAMING
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              {isGaming
+                ? "Search 500,000+ video games across PC, PlayStation, Xbox, and Switch"
+                : "Search movies, TV series, or anime on TMDB"}
             </p>
           </div>
 
@@ -230,19 +289,23 @@ export function SearchAddDrawer({
 
         {/* Search Input Bar & Category Filter Chips */}
         <div className="px-4 py-2 sm:px-5 space-y-2.5 shrink-0">
-          <div className="relative flex items-center bg-zinc-900 border border-zinc-800 focus-within:border-amber-500/80 rounded-xl px-3.5 py-2.5 shadow-inner transition-colors">
+          <div className={`relative flex items-center bg-zinc-900 border ${isGaming ? "focus-within:border-emerald-500/80" : "focus-within:border-amber-500/80"} border-zinc-800 rounded-xl px-3.5 py-2.5 shadow-inner transition-colors`}>
             <Search className="w-4 h-4 text-zinc-400 mr-2.5 shrink-0" />
             <input
               ref={inputRef}
               id="search-drawer-input"
               type="text"
               className="w-full bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none"
-              placeholder="Search title, e.g. Oppenheimer, Breaking Bad, Jujutsu Kaisen..."
+              placeholder={
+                isGaming
+                  ? "Search games, e.g. Elden Ring, The Witcher 3, Cyberpunk 2077..."
+                  : "Search title, e.g. Oppenheimer, Breaking Bad, Jujutsu Kaisen..."
+              }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             {loading && (
-              <Loader2 className="w-4 h-4 text-amber-400 animate-spin mr-1.5 shrink-0" />
+              <Loader2 className={`w-4 h-4 ${isGaming ? "text-emerald-400" : "text-amber-400"} animate-spin mr-1.5 shrink-0`} />
             )}
             {query.length > 0 && !loading && (
               <button
@@ -261,55 +324,133 @@ export function SearchAddDrawer({
             )}
           </div>
 
-          {/* Media Category Filter Chips */}
+          {/* Category Filter Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
-            <button
-              type="button"
-              onClick={() => setActiveCategory("all")}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                activeCategory === "all"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveCategory("movie")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                activeCategory === "movie"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-              }`}
-            >
-              <Film className="w-3 h-3 text-emerald-400" />
-              <span>Movies</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveCategory("tv")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                activeCategory === "tv"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-              }`}
-            >
-              <Tv className="w-3 h-3 text-blue-400" />
-              <span>Series</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveCategory("anime")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                activeCategory === "anime"
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                  : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-              }`}
-            >
-              <Sparkles className="w-3 h-3 text-amber-400" />
-              <span>Anime</span>
-            </button>
+            {isGaming ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("all")}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "all"
+                      ? "bg-emerald-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  All Games
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("top")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "top"
+                      ? "bg-emerald-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  <Trophy className="w-3 h-3 text-amber-400" />
+                  <span>Top Rated</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("rpg")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "rpg"
+                      ? "bg-emerald-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  <Shield className="w-3 h-3 text-indigo-400" />
+                  <span>RPG</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("action")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "action"
+                      ? "bg-emerald-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  <Swords className="w-3 h-3 text-rose-400" />
+                  <span>Action</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("indie")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "indie"
+                      ? "bg-emerald-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>Indie</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("strategy")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "strategy"
+                      ? "bg-emerald-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  <Layers className="w-3 h-3 text-sky-400" />
+                  <span>Strategy</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("all")}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "all"
+                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("movie")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "movie"
+                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  <Film className="w-3 h-3 text-emerald-400" />
+                  <span>Movies</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("tv")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "tv"
+                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  <Tv className="w-3 h-3 text-blue-400" />
+                  <span>Series</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("anime")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === "anime"
+                      ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                      : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>Anime</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -318,14 +459,26 @@ export function SearchAddDrawer({
           <span className="flex items-center gap-1.5 font-semibold text-zinc-300">
             {isSearching ? (
               <>
-                <Search className="w-3 h-3 text-amber-400" />
+                <Search className={`w-3 h-3 ${isGaming ? "text-emerald-400" : "text-amber-400"}`} />
                 <span>Search results ({filteredList.length})</span>
               </>
             ) : (
               <>
-                <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                <Flame className={`w-3.5 h-3.5 ${isGaming ? "text-emerald-400 fill-emerald-400" : "text-amber-400 fill-amber-400"}`} />
                 <span>
-                  {activeCategory === "anime"
+                  {isGaming
+                    ? activeCategory === "top"
+                      ? "Highest Metascore video games"
+                      : activeCategory === "rpg"
+                      ? "Top Role-Playing Games"
+                      : activeCategory === "action"
+                      ? "Popular Action & Shooter games"
+                      : activeCategory === "indie"
+                      ? "Acclaimed Indie titles"
+                      : activeCategory === "strategy"
+                      ? "Top Strategy & Puzzle games"
+                      : "Trending & Popular video games"
+                    : activeCategory === "anime"
                     ? "Popular Anime series & movies"
                     : activeCategory === "movie"
                     ? "Trending Movies this week"
@@ -337,7 +490,7 @@ export function SearchAddDrawer({
             )}
           </span>
           <span className="text-[11px] text-zinc-500">
-            TMDB Powered
+            {isGaming ? "RAWG Powered" : "TMDB Powered"}
           </span>
         </div>
 
@@ -349,7 +502,7 @@ export function SearchAddDrawer({
           {fetchError ? (
             <div className="py-16 flex flex-col items-center justify-center text-center px-4">
               <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3 text-amber-400">
-                <Film className="w-6 h-6" />
+                {isGaming ? <Gamepad2 className="w-6 h-6 text-emerald-400" /> : <Film className="w-6 h-6 text-amber-400" />}
               </div>
               <h4 className="text-sm font-semibold text-zinc-200 mb-1">
                 Unable to load results
@@ -375,8 +528,10 @@ export function SearchAddDrawer({
             </div>
           ) : currentLoading ? (
             <div className="py-16 flex flex-col items-center justify-center text-center">
-              <Loader2 className="w-7 h-7 text-amber-400 animate-spin mb-3" />
-              <p className="text-sm font-medium text-zinc-300">Finding titles...</p>
+              <Loader2 className={`w-7 h-7 ${isGaming ? "text-emerald-400" : "text-amber-400"} animate-spin mb-3`} />
+              <p className="text-sm font-medium text-zinc-300">
+                {isGaming ? "Finding games..." : "Finding titles..."}
+              </p>
             </div>
           ) : filteredList.length === 0 ? (
             <div className="py-16 flex flex-col items-center justify-center text-center px-4">
@@ -384,10 +539,10 @@ export function SearchAddDrawer({
                 <Search className="w-6 h-6" />
               </div>
               <h4 className="text-sm font-semibold text-zinc-300 mb-1">
-                {isSearching ? `No results for "${query}"` : "No titles found"}
+                {isSearching ? `No results for "${query}"` : isGaming ? "No games found" : "No titles found"}
               </h4>
               <p className="text-xs text-zinc-500 max-w-xs mb-3">
-                Try searching with another spelling or switch the category filter.
+                Try searching with another game title or switch category.
               </p>
               {isSearching && (
                 <button
@@ -405,7 +560,9 @@ export function SearchAddDrawer({
             </div>
           ) : (
             filteredList.map((item) => {
-              const poster = getPosterUrl(item.poster_path);
+              const poster = isGaming
+                ? item.poster_path
+                : getPosterUrl(item.poster_path);
               const isWatchlist = existingWatchlistIds.has(item.tmdb_id);
               const isWatched = existingWatchedIds.has(item.tmdb_id);
               const isTv = item.media_type === "tv";
@@ -414,22 +571,33 @@ export function SearchAddDrawer({
 
               return (
                 <div
-                  key={`${item.media_type}-${item.tmdb_id}`}
+                  key={`${item.media_type || (isGaming ? "game" : "movie")}-${item.tmdb_id}`}
                   id={`drawer-result-${item.tmdb_id}`}
                   onClick={() => onSelectMovie?.(item)}
                   className="p-2.5 sm:p-3 rounded-2xl bg-zinc-900/40 hover:bg-zinc-900/80 border border-zinc-800/40 hover:border-zinc-700/80 transition-all flex gap-3.5 group cursor-pointer"
                   title="Click to view details"
                 >
-                  {/* Poster */}
+                  {/* Poster / Cover Art */}
                   <div className="relative w-16 sm:w-20 aspect-[2/3] rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 shrink-0 shadow-xs">
                     <img
                       src={
                         poster ||
-                        "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60"
+                        (isGaming
+                          ? "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=300&auto=format&fit=crop&q=60"
+                          : "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60")
                       }
                       alt={item.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.dataset.failed) {
+                          target.dataset.failed = "true";
+                          target.src = isGaming
+                            ? "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=300&auto=format&fit=crop&q=60"
+                            : "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200&auto=format&fit=crop&q=60";
+                        }
+                      }}
                     />
                   </div>
 
@@ -438,31 +606,50 @@ export function SearchAddDrawer({
                     <div>
                       {/* Title & Media Badge */}
                       <div className="flex items-start justify-between gap-1.5">
-                        <h3 className="text-sm font-bold text-zinc-100 leading-snug line-clamp-1 group-hover:text-amber-400 transition-colors">
+                        <h3 className={`text-sm font-bold text-zinc-100 leading-snug line-clamp-1 ${isGaming ? "group-hover:text-emerald-400" : "group-hover:text-amber-400"} transition-colors`}>
                           {item.title}
                         </h3>
                       </div>
 
                       {/* Badges & Metadata */}
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[11px] text-zinc-400">
-                        <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 font-semibold text-[10px]">
-                          {isAnime ? (
-                            <>
-                              <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                              <span>Anime</span>
-                            </>
-                          ) : isTv ? (
-                            <>
-                              <Tv className="w-2.5 h-2.5 text-blue-400" />
-                              <span>Series</span>
-                            </>
-                          ) : (
-                            <>
-                              <Film className="w-2.5 h-2.5 text-emerald-400" />
-                              <span>Movie</span>
-                            </>
-                          )}
-                        </span>
+                        {isGaming ? (
+                          <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 font-semibold text-[10px]">
+                            <Gamepad2 className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>Game</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 font-semibold text-[10px]">
+                            {isAnime ? (
+                              <>
+                                <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                                <span>Anime</span>
+                              </>
+                            ) : isTv ? (
+                              <>
+                                <Tv className="w-2.5 h-2.5 text-blue-400" />
+                                <span>Series</span>
+                              </>
+                            ) : (
+                              <>
+                                <Film className="w-2.5 h-2.5 text-emerald-400" />
+                                <span>Movie</span>
+                              </>
+                            )}
+                          </span>
+                        )}
+
+                        {item.metacritic && (
+                          <span className={`px-1.5 py-0.2 rounded font-mono font-bold text-[10px] border ${
+                            item.metacritic >= 85
+                              ? "bg-emerald-950/60 text-emerald-300 border-emerald-600/40"
+                              : item.metacritic >= 75
+                              ? "bg-amber-950/60 text-amber-300 border-amber-600/40"
+                              : "bg-zinc-800 text-zinc-300 border-zinc-700"
+                          }`}>
+                            {item.metacritic} Meta
+                          </span>
+                        )}
 
                         {item.release_year && (
                           <span className="text-zinc-500 font-medium">{item.release_year}</span>
@@ -475,12 +662,17 @@ export function SearchAddDrawer({
                         )}
                       </div>
 
-                      {/* OTT Platforms */}
+                      {/* Platforms (OTT or Game Platforms) */}
                       {item.platforms && item.platforms.length > 0 && (
                         <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                           {item.platforms.slice(0, 3).map((p) => (
                             <OttBadge key={p} platform={p} />
                           ))}
+                          {item.platforms.length > 3 && (
+                            <span className="text-[10px] text-zinc-500 font-mono">
+                              +{item.platforms.length - 3}
+                            </span>
+                          )}
                         </div>
                       )}
 
@@ -494,7 +686,7 @@ export function SearchAddDrawer({
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 mt-2.5 pt-1.5 flex-wrap">
-                      {/* Watchlist Toggle Button (Re-clicking removes/undoes from watchlist) */}
+                      {/* Watchlist / Backlog Toggle Button */}
                       <button
                         type="button"
                         id={`btn-add-watchlist-${item.tmdb_id}`}
@@ -505,16 +697,26 @@ export function SearchAddDrawer({
                         }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer active:scale-95 ${
                           isWatchlist
-                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                            ? isGaming
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30"
+                              : "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
                             : isWatched
                             ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                            : isGaming
+                            ? "bg-zinc-100 hover:bg-emerald-400 text-zinc-950 shadow-xs"
                             : "bg-zinc-100 hover:bg-amber-400 text-zinc-950 shadow-xs"
                         }`}
                         title={
                           isWatchlist
-                            ? "In Watchlist — Click to remove (Undo)"
+                            ? isGaming
+                              ? "In Backlog — Click to remove (Undo)"
+                              : "In Watchlist — Click to remove (Undo)"
                             : isWatched
-                            ? "Marked watched — Click to move back to To Watch"
+                            ? isGaming
+                              ? "Marked played — Click to move back to To Play"
+                              : "Marked watched — Click to move back to To Watch"
+                            : isGaming
+                            ? "Add to Gaming Backlog"
                             : "Add to Watchlist"
                         }
                       >
@@ -523,17 +725,17 @@ export function SearchAddDrawer({
                         ) : isWatchlist ? (
                           <>
                             <Check className="w-3.5 h-3.5" />
-                            <span>In Watchlist</span>
+                            <span>{isGaming ? "In Backlog" : "In Watchlist"}</span>
                           </>
                         ) : (
                           <>
                             <Plus className="w-3.5 h-3.5" />
-                            <span>To Watch</span>
+                            <span>{isGaming ? "To Play" : "To Watch"}</span>
                           </>
                         )}
                       </button>
 
-                      {/* Watched Toggle Button (Re-clicking unmarks/undoes watched status) */}
+                      {/* Watched / Played Toggle Button */}
                       <button
                         type="button"
                         id={`btn-add-watched-${item.tmdb_id}`}
@@ -549,12 +751,16 @@ export function SearchAddDrawer({
                         }`}
                         title={
                           isWatched
-                            ? "Watched — Click to unmark (Undo)"
+                            ? isGaming
+                              ? "Played — Click to unmark (Undo)"
+                              : "Watched — Click to unmark (Undo)"
+                            : isGaming
+                            ? "Rate & Mark Played"
                             : "Rate & Mark Watched"
                         }
                       >
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>{isWatched ? "Watched" : "Mark Watched"}</span>
+                        <span>{isWatched ? (isGaming ? "Played" : "Watched") : (isGaming ? "Mark Played" : "Mark Watched")}</span>
                       </button>
                     </div>
                   </div>

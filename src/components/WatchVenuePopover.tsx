@@ -177,7 +177,7 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
               </div>
 
               {/* Custom platform input */}
-              <form onSubmit={handleCustomSubmit} className="pt-1 border-t border-zinc-800/60">
+              <form onSubmit={handleCustomSubmit} className="pt-1.5 mt-1">
                 <div className="flex items-center gap-1.5">
                   <input
                     type="text"
@@ -268,14 +268,15 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
                               key={p}
                               type="button"
                               onClick={() => handleSelectVenueAndPlatform("ott", p)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
                                 isSelected
-                                  ? "bg-amber-500 text-zinc-950 border-amber-400 font-bold shadow-xs"
-                                  : `${theme.bg} ${theme.border} ${theme.text} hover:opacity-90`
+                                  ? "bg-gradient-to-r from-amber-400 to-amber-300 text-zinc-950 border-amber-400 font-bold shadow-sm shadow-amber-500/20"
+                                  : `${theme.bg} ${theme.border} ${theme.text} hover:opacity-95`
                               }`}
                             >
-                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? "bg-zinc-950" : theme.dot}`} />
                               <span>{p}</span>
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                             </button>
                           );
                         })}
@@ -291,19 +292,21 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
                     <div className="flex flex-wrap gap-1.5">
                       {POPULAR_OTTS.map((p) => {
                         const isSelected = venue === "ott" && platform.toLowerCase() === p.toLowerCase();
+                        const theme = getPlatformAccentTheme(p);
                         return (
                           <button
                             key={p}
                             type="button"
                             onClick={() => handleSelectVenueAndPlatform("ott", p)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center gap-1 ${
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
                               isSelected
-                                ? "bg-amber-500 text-zinc-950 border-amber-400 font-bold shadow-xs"
-                                : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 border-zinc-800"
+                                ? "bg-gradient-to-r from-amber-400 to-amber-300 text-zinc-950 border-amber-400 font-bold shadow-sm shadow-amber-500/20"
+                                : `${theme.bg} ${theme.border} ${theme.text} hover:opacity-95`
                             }`}
                           >
-                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? "bg-zinc-950" : theme.dot}`} />
                             <span>{p}</span>
+                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                           </button>
                         );
                       })}
@@ -311,7 +314,7 @@ export const WatchVenuePopover: React.FC<WatchVenuePopoverProps> = ({
                   </div>
 
                   {/* Custom OTT input */}
-                  <form onSubmit={handleCustomSubmit} className="pt-1 border-t border-zinc-800/60">
+                  <form onSubmit={handleCustomSubmit} className="pt-1.5 mt-1">
                     <div className="flex items-center gap-1.5">
                       <input
                         type="text"

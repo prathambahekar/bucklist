@@ -614,37 +614,33 @@ export function SearchAddDrawer({
                       {/* Badges & Metadata */}
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[11px] text-zinc-400">
                         {isGaming ? (
-                          <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 font-semibold text-[10px]">
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-emerald-500/15 to-teal-500/10 border border-emerald-500/35 text-emerald-300 font-semibold text-[10px] shadow-2xs">
                             <Gamepad2 className="w-2.5 h-2.5 text-emerald-400" />
                             <span>Game</span>
                           </span>
+                        ) : isAnime ? (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-purple-500/15 to-pink-500/10 border border-purple-400/35 text-purple-200 font-semibold text-[10px] shadow-2xs">
+                            <Sparkles className="w-2.5 h-2.5 text-purple-300" />
+                            <span>Anime</span>
+                          </span>
+                        ) : isTv ? (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/15 to-indigo-500/10 border border-blue-400/35 text-blue-200 font-semibold text-[10px] shadow-2xs">
+                            <Tv className="w-2.5 h-2.5 text-blue-300" />
+                            <span>Series</span>
+                          </span>
                         ) : (
-                          <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 font-semibold text-[10px]">
-                            {isAnime ? (
-                              <>
-                                <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                                <span>Anime</span>
-                              </>
-                            ) : isTv ? (
-                              <>
-                                <Tv className="w-2.5 h-2.5 text-blue-400" />
-                                <span>Series</span>
-                              </>
-                            ) : (
-                              <>
-                                <Film className="w-2.5 h-2.5 text-emerald-400" />
-                                <span>Movie</span>
-                              </>
-                            )}
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-zinc-800/80 to-zinc-850/80 border border-zinc-700/60 text-zinc-200 font-semibold text-[10px] shadow-2xs">
+                            <Film className="w-2.5 h-2.5 text-zinc-400" />
+                            <span>Movie</span>
                           </span>
                         )}
 
                         {item.metacritic && (
-                          <span className={`px-1.5 py-0.2 rounded font-mono font-bold text-[10px] border ${
+                          <span className={`px-2 py-0.5 rounded-md font-mono font-bold text-[10px] border shadow-2xs ${
                             item.metacritic >= 85
-                              ? "bg-emerald-950/60 text-emerald-300 border-emerald-600/40"
+                              ? "bg-gradient-to-r from-emerald-500/15 to-teal-500/10 text-emerald-300 border-emerald-500/35"
                               : item.metacritic >= 75
-                              ? "bg-amber-950/60 text-amber-300 border-amber-600/40"
+                              ? "bg-gradient-to-r from-amber-500/15 to-yellow-500/10 text-amber-200 border-amber-500/35"
                               : "bg-zinc-800 text-zinc-300 border-zinc-700"
                           }`}>
                             {item.metacritic} Meta

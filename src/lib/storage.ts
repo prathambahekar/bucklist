@@ -188,7 +188,7 @@ export function updateSeriesSeasonRating(
   saveLocalTvProgress(all);
 }
 
-export type ViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline" | "collections";
+export type ViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline";
 export type WatchedViewMode = ViewMode;
 export type ToWatchViewMode = "detailed" | "compact" | "grid" | "cards";
 export type TimelinePeriod = "month" | "week" | "year";
@@ -197,7 +197,6 @@ const TOWATCH_VIEW_MODE_KEY = "bucklist_towatch_view_mode_v2";
 const WATCHED_VIEW_MODE_KEY = "bucklist_watched_view_mode_v2";
 const TIMELINE_PERIOD_KEY = "bucklist_timeline_period_v1";
 const BLEND_ENABLED_KEY = "bucklist_blend_enabled_v1";
-const COLLECTIONS_ENABLED_KEY = "bucklist_collections_enabled_v1";
 
 export function getLocalBlendEnabled(): boolean {
   try {
@@ -212,24 +211,6 @@ export function getLocalBlendEnabled(): boolean {
 export function saveLocalBlendEnabled(enabled: boolean): void {
   try {
     localStorage.setItem(BLEND_ENABLED_KEY, enabled ? "true" : "false");
-  } catch {
-    // ignore
-  }
-}
-
-export function getLocalCollectionsEnabled(): boolean {
-  try {
-    const raw = localStorage.getItem(COLLECTIONS_ENABLED_KEY);
-    if (raw === "false") return false;
-    return true; // Enabled by default
-  } catch {
-    return true;
-  }
-}
-
-export function saveLocalCollectionsEnabled(enabled: boolean): void {
-  try {
-    localStorage.setItem(COLLECTIONS_ENABLED_KEY, enabled ? "true" : "false");
   } catch {
     // ignore
   }
@@ -281,7 +262,7 @@ export function saveLocalWatchedCategory(cat: WatchedCategory): void {
 export function getLocalWatchedViewMode(): WatchedViewMode {
   try {
     const raw = localStorage.getItem(WATCHED_VIEW_MODE_KEY);
-    if (raw === "detailed" || raw === "compact" || raw === "grid" || raw === "cards" || raw === "timeline" || raw === "collections") {
+    if (raw === "detailed" || raw === "compact" || raw === "grid" || raw === "cards" || raw === "timeline") {
       return raw;
     }
   } catch {

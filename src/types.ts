@@ -23,12 +23,12 @@ export const PRIORITY_CONFIGS: Record<PriorityLevel, PriorityConfig> = {
     shortLabel: "Must Watch",
     rank: 4,
     description: "Highest priority • Watch next",
-    badgeBg: "bg-rose-500/10",
-    badgeBorder: "border-rose-500/30",
-    badgeText: "text-rose-300",
+    badgeBg: "bg-gradient-to-r from-rose-500/15 via-red-500/10 to-rose-600/15",
+    badgeBorder: "border-rose-500/35 hover:border-rose-500/55",
+    badgeText: "text-rose-200",
     dotBg: "bg-rose-500",
-    hoverBg: "hover:bg-rose-500/15",
-    activeBg: "bg-rose-500/20 text-rose-200 border-rose-500/40",
+    hoverBg: "hover:from-rose-500/25 hover:to-rose-600/25",
+    activeBg: "bg-rose-500/25 text-rose-100 border-rose-500/50",
   },
   very_interested: {
     id: "very_interested",
@@ -36,12 +36,12 @@ export const PRIORITY_CONFIGS: Record<PriorityLevel, PriorityConfig> = {
     shortLabel: "Very Interested",
     rank: 3,
     description: "Strong interest • High priority",
-    badgeBg: "bg-amber-500/10",
-    badgeBorder: "border-amber-500/30",
-    badgeText: "text-amber-300",
+    badgeBg: "bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-600/15",
+    badgeBorder: "border-amber-400/35 hover:border-amber-400/55",
+    badgeText: "text-amber-200",
     dotBg: "bg-amber-400",
-    hoverBg: "hover:bg-amber-500/15",
-    activeBg: "bg-amber-500/20 text-amber-200 border-amber-500/40",
+    hoverBg: "hover:from-amber-500/25 hover:to-amber-600/25",
+    activeBg: "bg-amber-500/25 text-amber-100 border-amber-500/50",
   },
   wanna_see: {
     id: "wanna_see",
@@ -49,12 +49,12 @@ export const PRIORITY_CONFIGS: Record<PriorityLevel, PriorityConfig> = {
     shortLabel: "Wanna See",
     rank: 2,
     description: "Standard watchlist item",
-    badgeBg: "bg-zinc-800/50",
-    badgeBorder: "border-zinc-700/50",
-    badgeText: "text-zinc-300",
+    badgeBg: "bg-gradient-to-r from-zinc-800/80 to-zinc-850/80",
+    badgeBorder: "border-zinc-700/60 hover:border-zinc-600/80",
+    badgeText: "text-zinc-200",
     dotBg: "bg-zinc-400",
-    hoverBg: "hover:bg-zinc-800/80",
-    activeBg: "bg-zinc-800 text-zinc-100 border-zinc-600/50",
+    hoverBg: "hover:bg-zinc-800",
+    activeBg: "bg-zinc-750 text-zinc-100 border-zinc-600/60",
   },
   maybe_later: {
     id: "maybe_later",
@@ -62,12 +62,12 @@ export const PRIORITY_CONFIGS: Record<PriorityLevel, PriorityConfig> = {
     shortLabel: "Maybe Later",
     rank: 1,
     description: "Low priority • If in the mood",
-    badgeBg: "bg-sky-500/10",
-    badgeBorder: "border-sky-500/30",
-    badgeText: "text-sky-300",
+    badgeBg: "bg-gradient-to-r from-sky-500/15 via-blue-500/10 to-sky-600/15",
+    badgeBorder: "border-sky-400/35 hover:border-sky-400/55",
+    badgeText: "text-sky-200",
     dotBg: "bg-sky-400",
-    hoverBg: "hover:bg-sky-500/15",
-    activeBg: "bg-sky-500/20 text-sky-200 border-sky-500/40",
+    hoverBg: "hover:from-sky-500/25 hover:to-sky-600/25",
+    activeBg: "bg-sky-500/25 text-sky-100 border-sky-500/50",
   },
 };
 
@@ -205,8 +205,8 @@ export interface TvSeriesDetails {
 
 export type TabType = "towatch" | "watched" | "blend" | "settings";
 export type SortByType = "newest" | "rating" | "release";
-export type ViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline" | "collections";
-export type WatchedViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline" | "collections";
+export type ViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline";
+export type WatchedViewMode = "detailed" | "compact" | "grid" | "cards" | "timeline";
 export type ToWatchViewMode = "detailed" | "compact" | "grid" | "cards";
 export type TimelinePeriod = "month" | "week" | "year";
 export type WatchedCategory = "all" | "movies" | "series" | "anime";

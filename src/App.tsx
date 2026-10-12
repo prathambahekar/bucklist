@@ -60,13 +60,7 @@ import {
   TvProgressMap,
   getLocalBlendEnabled,
   saveLocalBlendEnabled,
-  getLocalCollectionsEnabled,
-  saveLocalCollectionsEnabled,
 } from "./lib/storage";
-import {
-  getLocalCollections,
-  saveLocalCollections,
-} from "./lib/collections";
 import {
   searchMovies,
   getPosterUrl,
@@ -83,12 +77,9 @@ import { DatePickerPopover } from "./components/DatePickerPopover";
 import { WatchVenuePopover, WatchVenueType } from "./components/WatchVenuePopover";
 import { SettingsView } from "./components/SettingsView";
 import { WatchedTimelineView } from "./components/WatchedTimelineView";
-import { CollectionsView } from "./components/CollectionsView";
-import { AddToCollectionModal } from "./components/AddToCollectionModal";
 import { SearchAddDrawer } from "./components/SearchAddDrawer";
 import { UniversalSearchDrawer } from "./components/UniversalSearchDrawer";
 import { SetPriorityModal } from "./components/SetPriorityModal";
-import { NotificationPopover } from "./components/NotificationPopover";
 import { SwipeableMovieCard } from "./components/SwipeableMovieCard";
 import { BatchManagementBar } from "./components/BatchManagementBar";
 import { BlendView } from "./components/BlendView";
@@ -99,7 +90,6 @@ import {
   type SearchResult,
   type MovieDetailExtra,
   type TabType,
-  type MovieCollection,
   type PriorityLevel,
   type AppMode,
   PRIORITY_CONFIGS,
@@ -201,13 +191,7 @@ export default function App() {
     getLocalWatchedCategory()
   );
 
-  // Collections state
-  const [customCollections, setCustomCollections] = useState<MovieCollection[]>(() =>
-    getLocalCollections()
-  );
-  const [addToCollectionMovie, setAddToCollectionMovie] = useState<WatchlistMovie | null>(null);
   const [blendEnabled, setBlendEnabled] = useState<boolean>(() => getLocalBlendEnabled());
-  const [collectionsEnabled, setCollectionsEnabled] = useState<boolean>(() => getLocalCollectionsEnabled());
 
   // Priority modal state when adding to watchlist
   const [priorityModalMovie, setPriorityModalMovie] = useState<SearchResult | WatchlistMovie | null>(null);
@@ -266,14 +250,6 @@ export default function App() {
     setWatchedViewMode(mode);
     saveLocalWatchedViewMode(mode);
   }, []);
-
-  const handleToggleCollections = useCallback((enabled: boolean) => {
-    setCollectionsEnabled(enabled);
-    saveLocalCollectionsEnabled(enabled);
-    if (!enabled && watchedViewMode === "collections") {
-      handleSetWatchedViewMode("timeline");
-    }
-  }, [watchedViewMode, handleSetWatchedViewMode]);
 
   const handleSetTimelinePeriod = useCallback((period: TimelinePeriod) => {
     setTimelinePeriod(period);
@@ -1255,7 +1231,6 @@ export default function App() {
     Boolean(activeTvDrawerMovie) ||
     Boolean(detailMovie) ||
     Boolean(watchedModalMovie) ||
-    Boolean(addToCollectionMovie) ||
     genreModalOpen;
 
   const renderMovieCard = (item: WatchlistMovie) => {
@@ -1408,14 +1383,14 @@ export default function App() {
             onMouseDown={() => handleLongPressStart(item.id)}
             onMouseUp={handleLongPressStop}
             onMouseLeave={handleLongPressStop}
-            className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-2 sm:p-2.5 flex flex-col transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative h-full ${
+            className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-xl p-2 sm:p-2.5 flex flex-col transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative h-full ${
               isSelected
                 ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
                 : "border-zinc-800/80 hover:border-amber-500/40"
             }`}
           >
             {/* Poster Aspect Container */}
-            <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-zinc-800 shadow-md border border-zinc-800/80">
+            <div className="relative aspect-[2/3] w-full rounded-lg overflow-hidden bg-zinc-800 shadow-md border border-zinc-800/80">
               <img
                 src={poster || defaultFallbackPoster}
                 alt={item.title}
@@ -1467,7 +1442,7 @@ export default function App() {
                         e.stopPropagation();
                         setActiveTvDrawerMovie({ ...item, media_type: "tv" });
                       }}
-                      className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between bg-zinc-950/85 backdrop-blur-md px-2 py-0.5 rounded-lg border border-amber-500/30 text-amber-300 text-[10px] font-semibold shadow-md hover:bg-amber-500 hover:text-zinc-950 transition-colors"
+                      className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md px-2 py-0.5 rounded-lg border border-amber-500/35 text-amber-200 text-[10px] font-semibold shadow-md hover:bg-amber-500 hover:text-zinc-950 transition-colors"
                     >
                       <span className="flex items-center gap-1">
                         <Tv className="w-2.5 h-2.5 text-amber-400 shrink-0" />
@@ -1483,7 +1458,7 @@ export default function App() {
                       e.stopPropagation();
                       setActiveTvDrawerMovie({ ...item, media_type: "tv" });
                     }}
-                    className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md px-2 py-1 rounded-lg border border-zinc-700/80 hover:border-amber-500/50 text-zinc-100 hover:text-amber-300 text-[10px] font-semibold shadow-md transition-colors group/trackbtn"
+                    className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md px-2 py-1 rounded-lg border border-zinc-700/80 hover:border-amber-400/50 text-zinc-100 hover:text-amber-200 text-[10px] font-semibold shadow-md transition-colors group/trackbtn"
                   >
                     <span className="flex items-center gap-1">
                       <ListOrdered className="w-3 h-3 text-amber-400 group-hover/trackbtn:scale-110 transition-transform shrink-0" />
@@ -1500,7 +1475,7 @@ export default function App() {
                       e.stopPropagation();
                       handleOpenWatchedModal(item, 5);
                     }}
-                    className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-center gap-1 bg-zinc-100 hover:bg-amber-400 text-zinc-950 text-[10px] font-bold py-1 px-2 rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
+                    className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-center gap-1 bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-yellow-200 text-zinc-950 text-[10px] font-bold py-1 px-2 rounded-lg transition-all shadow-sm shadow-amber-500/20 active:scale-95 cursor-pointer"
                   >
                     <Check className="w-3 h-3 stroke-[2.5]" />
                     <span>{appMode === "gaming" ? "Played" : "Watched"}</span>
@@ -1587,7 +1562,7 @@ export default function App() {
             onMouseDown={() => handleLongPressStart(item.id)}
             onMouseUp={handleLongPressStop}
             onMouseLeave={handleLongPressStop}
-            className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-2.5 sm:p-3 flex items-center justify-between gap-3 sm:gap-4 transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative ${
+            className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-xl p-2.5 sm:p-3 flex items-center justify-between gap-3 sm:gap-4 transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative ${
               isSelected
                 ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
                 : "border-zinc-800/80 hover:border-amber-500/35"
@@ -1596,7 +1571,7 @@ export default function App() {
             {/* Left Content Area: Thumbnail + Info */}
             <div className="relative z-10 flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
               {/* Compact Poster Thumbnail */}
-              <div className="w-12 h-16 sm:w-13 sm:h-18 rounded-xl overflow-hidden bg-zinc-900 shrink-0 shadow-md ring-1 ring-white/10 relative">
+              <div className="w-12 h-16 sm:w-13 sm:h-18 rounded-lg overflow-hidden bg-zinc-900 shrink-0 shadow-md ring-1 ring-white/10 relative">
                 <img
                   src={poster || defaultFallbackPoster}
                   alt={item.title}
@@ -1772,14 +1747,14 @@ export default function App() {
           onMouseDown={() => handleLongPressStart(item.id)}
           onMouseUp={handleLongPressStop}
           onMouseLeave={handleLongPressStop}
-          className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-2xl p-3.5 sm:p-4 flex gap-3.5 sm:gap-4 transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative ${
+          className={`group bg-zinc-900/90 hover:bg-zinc-900 border rounded-xl p-3.5 sm:p-4 flex gap-3.5 sm:gap-4 transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer relative ${
             isSelected
               ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30"
               : "border-zinc-800/80 hover:border-amber-500/35"
           }`}
         >
-          {/* Thumbnail */}
-          <div className="relative rounded-xl overflow-hidden bg-zinc-800 shrink-0 shadow-md border border-zinc-800/80 w-22 sm:w-26 md:w-28 h-34 sm:h-38 md:h-40">
+          {/* Thumbnail - Cinematic 2:3 aspect ratio with proportional width */}
+          <div className="relative rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-md border border-zinc-800/80 w-24 sm:w-28 md:w-32 aspect-[2/3] self-start">
             <img
               src={poster || defaultFallbackPoster}
               alt={item.title}
@@ -1844,18 +1819,24 @@ export default function App() {
                 )}
 
                 {appMode === "gaming" || item.media_type === "game" ? (
-                  <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                    <Gamepad2 className="w-2.5 h-2.5" />
+                  <span className="text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-600/15 text-emerald-300 border border-emerald-500/35 shadow-[0_1px_4px_rgba(16,185,129,0.1)] flex items-center gap-1">
+                    <Gamepad2 className="w-2.5 h-2.5 text-emerald-400" />
                     <span>Video Game</span>
                   </span>
                 ) : isItemAnime(item) ? (
-                  <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5" />
+                  <span className="text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-purple-500/15 via-fuchsia-500/10 to-pink-500/15 text-purple-200 border border-purple-400/35 shadow-[0_1px_4px_rgba(168,85,247,0.1)] flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5 text-purple-300" />
                     <span>{isTv ? "Anime Series" : "Anime Movie"}</span>
                   </span>
+                ) : isTv ? (
+                  <span className="text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/15 via-sky-500/10 to-indigo-500/15 text-blue-200 border border-blue-400/35 shadow-[0_1px_4px_rgba(59,130,246,0.1)] flex items-center gap-1">
+                    <Tv className="w-2.5 h-2.5 text-blue-300" />
+                    <span>TV Series</span>
+                  </span>
                 ) : (
-                  <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                    {isTv ? "TV Series" : "Movie"}
+                  <span className="text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-zinc-800/80 to-zinc-850/80 text-zinc-200 border border-zinc-700/60 shadow-2xs flex items-center gap-1">
+                    <Film className="w-2.5 h-2.5 text-zinc-400" />
+                    <span>Movie</span>
                   </span>
                 )}
                 {item.release_year && (
@@ -1889,7 +1870,7 @@ export default function App() {
 
             {/* Bottom Action / Episode Tracker / Rating */}
             {!isBatchMode && (
-              <div className="border-t border-zinc-800/70 mt-3 pt-2.5">
+              <div className="mt-auto pt-2">
                 {!item.watched ? (
                   isTv ? (
                     <button
@@ -1899,7 +1880,7 @@ export default function App() {
                         e.stopPropagation();
                         setActiveTvDrawerMovie({ ...item, media_type: "tv" });
                       }}
-                      className="w-full flex items-center justify-between gap-2 bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 hover:border-amber-500/40 rounded-xl text-xs font-semibold text-zinc-100 transition-all duration-200 active:scale-[0.99] shadow-sm py-2 sm:py-2.5 px-3 group/tracker"
+                      className="w-full flex items-center justify-between gap-2 bg-gradient-to-r from-zinc-900/90 via-[#18181b] to-zinc-900/90 hover:from-zinc-850 hover:to-zinc-800 border border-zinc-800/90 hover:border-amber-400/40 rounded-xl text-xs font-semibold text-zinc-100 transition-all duration-200 active:scale-[0.99] shadow-xs py-2 sm:py-2.5 px-3 group/tracker"
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
                         <ListOrdered className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -1913,10 +1894,10 @@ export default function App() {
                         </span>
                         {progressPercent > 0 && (
                           <span
-                            className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-xs ${
                               progressPercent === 100
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
                             }`}
                           >
                             {progressPercent}%
@@ -1932,21 +1913,21 @@ export default function App() {
                         e.stopPropagation();
                         handleOpenWatchedModal(item, 5);
                       }}
-                      className="w-full flex items-center justify-center gap-2 bg-zinc-100 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 active:scale-98 shadow-sm py-2 sm:py-2.5 px-3 cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 via-amber-400 to-amber-300 hover:from-amber-300 hover:to-yellow-200 text-zinc-950 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 active:scale-98 shadow-sm shadow-amber-500/20 py-2 sm:py-2.5 px-3 cursor-pointer"
                     >
                       <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                       <span className="whitespace-nowrap">{appMode === "gaming" ? "Mark as Played" : "Mark as Watched"}</span>
                     </button>
                   )
                 ) : (
-                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                  <div className="flex items-center justify-between gap-1.5 flex-wrap">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleOpenWatchedModal(item, item.rating || 5);
                       }}
-                      className="flex items-center gap-1 hover:bg-zinc-800/80 px-1.5 py-0.5 rounded-md transition-colors group/rate cursor-pointer"
+                      className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/12 to-yellow-500/8 hover:from-amber-500/20 hover:to-yellow-500/15 border border-amber-500/25 px-2 py-1 rounded-lg transition-all group/rate cursor-pointer shadow-xs"
                       title="Click to edit rating & date"
                     >
                       <StarRating
@@ -1966,7 +1947,7 @@ export default function App() {
                             e.stopPropagation();
                             setActiveTvDrawerMovie({ ...item, media_type: "tv" });
                           }}
-                          className="text-[10px] sm:text-[11px] text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 px-2 py-0.5 rounded-lg font-semibold transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                          className="text-[10px] sm:text-[11px] text-amber-200 hover:text-white bg-gradient-to-r from-amber-500/15 to-yellow-500/10 hover:from-amber-500/25 hover:to-yellow-500/20 border border-amber-500/30 px-2 py-0.5 rounded-lg font-semibold transition-all flex items-center gap-1 shadow-2xs whitespace-nowrap"
                         >
                           <Tv className="w-3 h-3 text-amber-400 shrink-0" />
                           <span>{watchedEpCount}{totalEpCount ? `/${totalEpCount}` : ""} Ep</span>
@@ -1979,11 +1960,11 @@ export default function App() {
                           e.stopPropagation();
                           handleOpenWatchedModal(item, item.rating || 5);
                         }}
-                        className="text-[10px] text-zinc-400 hover:text-amber-300 hover:bg-zinc-800/90 px-1.5 py-0.5 rounded-md border border-zinc-800 hover:border-amber-500/30 transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+                        className="text-[10px] text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 px-2 py-0.5 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-all flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
                         title="Edit rating & date"
                       >
-                        <Edit3 className="w-3 h-3" />
-                        <span className="hidden sm:inline">Edit</span>
+                        <Edit3 className="w-3 h-3 text-zinc-400" />
+                        <span className="hidden sm:inline font-medium">Edit</span>
                       </button>
                     </div>
                   </div>
@@ -2000,11 +1981,11 @@ export default function App() {
     <div id="bucklist-app" className="min-h-screen w-full max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col items-center pb-36 sm:pb-28">
       <div className="w-full max-w-6xl xl:max-w-7xl px-3.5 py-4 sm:px-6 lg:px-8 overflow-x-hidden">
         {/* Header Bar */}
-        <header id="app-header" className="flex items-center justify-between py-2 sm:py-3 mb-2 sm:mb-3">
-          <div className="flex items-center gap-3 select-none">
+        <header id="app-header" className="flex items-center justify-between gap-2 sm:gap-4 py-2 sm:py-3 mb-2 sm:mb-3 w-full min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 select-none min-w-0 shrink">
             <div
               id="logo-badge"
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center text-zinc-950 shadow-lg ring-1 transition-all duration-300 ${
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center text-zinc-950 shadow-lg ring-1 transition-all duration-300 shrink-0 ${
                 appMode === "gaming"
                   ? "bg-gradient-to-br from-emerald-400 via-teal-400 to-emerald-500 shadow-emerald-500/25 ring-emerald-400/50"
                   : "bg-gradient-to-br from-amber-400 to-amber-500 shadow-amber-500/20 ring-amber-400/40"
@@ -2016,9 +1997,9 @@ export default function App() {
                 <Bookmark className="w-5 h-5 fill-zinc-950 stroke-[2.5]" />
               )}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-zinc-100 flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <h1 className="text-base sm:text-xl font-extrabold tracking-tight text-zinc-100 shrink-0">
                   <span>Bucklist</span>
                 </h1>
                 {/* Interactive Mode Switcher Badge */}
@@ -2026,7 +2007,7 @@ export default function App() {
                   id="media-mode-toggle-badge"
                   type="button"
                   onClick={() => handleToggleAppMode(appMode === "cinema" ? "gaming" : "cinema")}
-                  className={`group inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-200 cursor-pointer shadow-xs border active:scale-95 ${
+                  className={`group inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wide uppercase transition-all duration-200 cursor-pointer shadow-xs border active:scale-95 shrink-0 whitespace-nowrap ${
                     appMode === "gaming"
                       ? "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border-emerald-500/30 hover:border-emerald-400/60 ring-1 ring-emerald-500/20"
                       : "bg-amber-400/10 hover:bg-amber-400/20 text-amber-400/90 hover:text-amber-300 border-amber-400/20 hover:border-amber-400/50 ring-1 ring-amber-400/10"
@@ -2038,15 +2019,15 @@ export default function App() {
                   }
                 >
                   {appMode === "gaming" ? (
-                    <Gamepad2 className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                    <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
                   ) : (
-                    <Film className="w-3 h-3 text-amber-400 group-hover:scale-110 transition-transform" />
+                    <Film className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 group-hover:scale-110 transition-transform" />
                   )}
                   <span>{appMode === "gaming" ? "Gaming" : "Cinema"}</span>
-                  <ArrowUpDown className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity ml-0.5" />
+                  <ArrowUpDown className="w-2 h-2 sm:w-2.5 sm:h-2.5 opacity-60 group-hover:opacity-100 transition-opacity ml-0.5" />
                 </button>
               </div>
-              <p className="text-[11px] text-zinc-500 hidden sm:block font-medium">
+              <p className="text-[11px] text-zinc-500 hidden sm:block font-medium truncate">
                 {appMode === "gaming"
                   ? "Personal Video Game Backlog & Tracker"
                   : "Personal Movie & Series Tracker"}
@@ -2055,17 +2036,17 @@ export default function App() {
           </div>
 
           {/* Top Actions */}
-          <div id="header-actions" className="flex items-center gap-1.5 sm:gap-2">
+          <div id="header-actions" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Universal Search Button */}
             <button
               id="open-universal-search-btn"
               type="button"
               onClick={() => setIsUniversalSearchOpen(true)}
-              className="flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-xl text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800/90 hover:border-zinc-700 active:scale-95 transition-all duration-150 cursor-pointer shadow-xs group"
+              className="flex items-center justify-center gap-1.5 h-8.5 sm:h-9 px-2.5 sm:px-3 rounded-xl text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800/90 hover:border-zinc-700 active:scale-95 transition-all duration-150 cursor-pointer shadow-xs group shrink-0"
               title="Universal Search"
               aria-label="Universal Search"
             >
-              <Search className="w-4 h-4 shrink-0 text-amber-400 group-hover:text-amber-300 transition-colors" />
+              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-amber-400 group-hover:text-amber-300 transition-colors" />
               <span className="hidden sm:inline font-medium">Search</span>
             </button>
 
@@ -2073,24 +2054,17 @@ export default function App() {
               id="open-settings-page-btn"
               type="button"
               onClick={() => setTab(tab === "settings" ? "towatch" : "settings")}
-              className={`flex items-center justify-center gap-1.5 h-9 w-9 sm:w-auto sm:px-3 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer shadow-xs border ${
+              className={`flex items-center justify-center gap-1.5 h-8.5 sm:h-9 px-2.5 sm:px-3 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer shadow-xs border shrink-0 ${
                 tab === "settings"
                   ? "bg-zinc-800 text-amber-400 border-amber-500/50 shadow-sm ring-1 ring-amber-400/25 font-bold"
                   : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800/90 hover:border-zinc-700 active:scale-95"
               }`}
               title="Settings & Data Management"
+              aria-label="Settings & Data Management"
             >
-              <Settings className={`w-4 h-4 shrink-0 transition-transform duration-200 ${tab === "settings" ? "text-amber-400 rotate-90" : "text-zinc-400 group-hover:text-amber-400"}`} />
+              <Settings className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-transform duration-200 ${tab === "settings" ? "text-amber-400 rotate-90" : "text-zinc-400 group-hover:text-amber-400"}`} />
               <span className="hidden sm:inline font-medium">Settings</span>
             </button>
-
-            {/* Notification Button on Right Side */}
-            <NotificationPopover
-              movies={movies}
-              watched={watched}
-              tvProgressMap={tvProgressMap}
-              onSelectMovie={(item) => setDetailMovie(item)}
-            />
           </div>
         </header>
 
@@ -2103,8 +2077,6 @@ export default function App() {
             onToggleBlend={(enabled) => {
               setBlendEnabled(enabled);
             }}
-            collectionsEnabled={collectionsEnabled}
-            onToggleCollections={handleToggleCollections}
             onDataUpdated={() => {
               fetchAll();
               setTvProgressMap(getLocalTvProgress());
@@ -2267,23 +2239,6 @@ export default function App() {
                     <span className="hidden sm:inline">Timeline</span>
                   </button>
                 )}
-
-                {tab === "watched" && collectionsEnabled && (
-                  <button
-                    type="button"
-                    id="view-opt-collections"
-                    onClick={() => handleSetWatchedViewMode("collections")}
-                    className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      watchedViewMode === "collections"
-                        ? "bg-amber-500 text-zinc-950 font-bold shadow-xs"
-                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-                    }`}
-                    title="Franchises & Collections"
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Collections</span>
-                  </button>
-                )}
               </div>
             </div>
 
@@ -2363,14 +2318,6 @@ export default function App() {
             <Loader2 className="w-8 h-8 animate-spin" />
             <p className="text-sm text-zinc-400">Loading your watchlist...</p>
           </div>
-        ) : tab === "watched" && collectionsEnabled && watchedViewMode === "collections" ? (
-          <CollectionsView
-            watchlist={[...movies, ...watched]}
-            customCollections={customCollections}
-            onCollectionsChange={(newCols) => setCustomCollections(newCols)}
-            onMovieClick={(item) => setDetailMovie(item)}
-            onMarkWatched={(item) => handleOpenWatchedModal(item, item.rating || 5)}
-          />
         ) : tab === "watched" && watchedViewMode === "timeline" ? (
           <WatchedTimelineView
             items={displayWatched}
@@ -2675,9 +2622,27 @@ export default function App() {
                         return (
                           <>
                             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                {isDetailGame ? "Game" : isItemAnime(detailMovie) ? "Anime" : isItemTv(detailMovie) ? "TV Series" : "Movie"}
-                              </span>
+                              {isDetailGame ? (
+                                <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-gradient-to-r from-emerald-500/15 to-teal-500/10 text-emerald-300 border border-emerald-500/35 flex items-center gap-1 shadow-2xs">
+                                  <Gamepad2 className="w-3 h-3 text-emerald-400" />
+                                  <span>Video Game</span>
+                                </span>
+                              ) : isItemAnime(detailMovie) ? (
+                                <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-gradient-to-r from-purple-500/15 to-pink-500/10 text-purple-200 border border-purple-400/35 flex items-center gap-1 shadow-2xs">
+                                  <Sparkles className="w-3 h-3 text-purple-300" />
+                                  <span>{isItemTv(detailMovie) ? "Anime Series" : "Anime Movie"}</span>
+                                </span>
+                              ) : isItemTv(detailMovie) ? (
+                                <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-gradient-to-r from-blue-500/15 to-indigo-500/10 text-blue-200 border border-blue-400/35 flex items-center gap-1 shadow-2xs">
+                                  <Tv className="w-3 h-3 text-blue-300" />
+                                  <span>TV Series</span>
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-gradient-to-r from-zinc-800/80 to-zinc-850/80 text-zinc-200 border border-zinc-700/60 flex items-center gap-1 shadow-2xs">
+                                  <Film className="w-3 h-3 text-zinc-400" />
+                                  <span>Movie</span>
+                                </span>
+                              )}
                               {detailMovie.release_year && (
                                 <span className="text-xs text-zinc-400 font-medium">
                                   {detailMovie.release_year}
@@ -2740,17 +2705,6 @@ export default function App() {
                                   <Bookmark className="w-3 h-3" />
                                   <span>{isDetailGame ? "Undo Played" : "Undo Watched"}</span>
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAddToCollectionMovie(isDetailInWatched);
-                                  }}
-                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-300 hover:text-amber-400 bg-zinc-800/80 hover:bg-zinc-750 px-2 py-0.5 rounded-md border border-zinc-700 transition-colors cursor-pointer"
-                                  title="Add to custom collection"
-                                >
-                                  <FolderPlus className="w-3 h-3 text-amber-400" />
-                                  <span>Collection</span>
-                                </button>
                               </div>
                             ) : isDetailInWatchlist ? (
                               <div className="mt-2.5 flex items-center gap-2 flex-wrap">
@@ -2760,7 +2714,7 @@ export default function App() {
                                     onClick={() => {
                                       handleOpenWatchedModal(isDetailInWatchlist, 5);
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow-sm cursor-pointer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-yellow-200 text-zinc-950 font-bold text-xs transition-all shadow-sm shadow-amber-500/20 active:scale-95 cursor-pointer"
                                   >
                                     <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                                     <span>{isDetailGame ? "Mark as Played" : "Mark as Watched"}</span>
@@ -2775,17 +2729,6 @@ export default function App() {
                                   onSelectPriority={(lvl) => handleUpdatePriority(isDetailInWatchlist, lvl)}
                                   className="px-2.5 py-1.5 rounded-xl cursor-pointer"
                                 />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAddToCollectionMovie(isDetailInWatchlist);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-amber-400 border border-zinc-800 text-xs font-semibold transition-colors cursor-pointer"
-                                  title="Add to custom collection"
-                                >
-                                  <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-                                  <span>Collection</span>
-                                </button>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -2816,7 +2759,7 @@ export default function App() {
                                     };
                                     await handleToggleWatchlist(itemAsSearch);
                                   }}
-                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-all shadow-sm cursor-pointer active:scale-95"
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-300 hover:from-amber-300 hover:to-yellow-200 text-zinc-950 font-bold text-xs transition-all shadow-sm shadow-amber-500/20 cursor-pointer active:scale-95"
                                 >
                                   <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                                   <span>{isDetailGame ? "To Backlog" : "To Watch"}</span>
@@ -2857,7 +2800,7 @@ export default function App() {
                             setDetailMovie(null);
                             setActiveTvDrawerMovie(target);
                           }}
-                          className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-colors active:scale-98 shadow-sm"
+                          className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/15 to-yellow-500/10 hover:from-amber-500/25 hover:to-yellow-500/20 text-amber-200 border border-amber-500/30 text-xs font-semibold transition-colors active:scale-98 shadow-sm"
                         >
                           <Tv className="w-3.5 h-3.5 text-amber-400" />
                           <span>Track Seasons & Episodes Drawer →</span>
@@ -2875,7 +2818,7 @@ export default function App() {
                   <div className="space-y-4 pr-1 pb-6">
                     {/* Tagline */}
                     {detailExtra?.tagline && (
-                      <p className="text-xs text-amber-400/90 italic border-l-2 border-amber-500/50 pl-3">
+                      <p className="text-xs text-amber-300 italic bg-amber-500/10 px-3 py-1.5 rounded-xl">
                         "{detailExtra.tagline}"
                       </p>
                     )}
@@ -2996,7 +2939,7 @@ export default function App() {
             className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl relative max-h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-3">
+            <div className="flex items-center justify-between pb-2 mb-2">
               <h3 className="text-sm font-bold text-zinc-100">Filter by Genre</h3>
               <button
                 type="button"
@@ -3251,16 +3194,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* Add To Collection Modal */}
-      <AddToCollectionModal
-        movie={addToCollectionMovie}
-        isOpen={Boolean(addToCollectionMovie)}
-        onClose={() => setAddToCollectionMovie(null)}
-        onCollectionsUpdated={() => {
-          setCustomCollections(getLocalCollections());
-        }}
-      />
     </div>
   );
 }

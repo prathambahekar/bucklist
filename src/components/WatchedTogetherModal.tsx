@@ -117,7 +117,7 @@ export function WatchedTogetherModal({
         </button>
 
         {/* Header */}
-        <div className="flex items-center gap-3.5 mb-5 pb-4 border-b border-zinc-800/80">
+        <div className="flex items-center gap-3.5 mb-5 pb-2">
           <div className="w-12 h-16 rounded-lg bg-zinc-900 overflow-hidden shrink-0 border border-zinc-800">
             {posterUrl ? (
               <img
@@ -248,7 +248,7 @@ export function WatchedTogetherModal({
                       </div>
 
                       {/* Quick Rating Presets */}
-                      <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-800/40 text-[10px]">
+                      <div className="flex items-center justify-between mt-2 pt-1 text-[10px]">
                         {[6, 7, 8, 9, 10].map((quick) => (
                           <button
                             key={quick}

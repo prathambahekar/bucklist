@@ -96,7 +96,7 @@ export function BatchManagementBar({
         </div>
 
         {/* Action Buttons Row */}
-        <div className="flex items-center gap-2 pt-1 border-t border-zinc-800/80 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 pt-1 flex-wrap sm:flex-nowrap">
           {/* Mark as Watched / Played button (if on towatch tab) */}
           {!isWatchedTab && onBatchMarkWatched && (
             <div className="relative flex-1 sm:flex-initial">

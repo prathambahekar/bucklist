@@ -460,7 +460,7 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
             </div>
 
             {/* Quick Actions Bar */}
-            <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-zinc-800/60">
+            <div className="flex items-center justify-between gap-2 mt-3 pt-1">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -724,10 +724,10 @@ export const EpisodeDrawer: React.FC<EpisodeDrawerProps> = ({
                             ep.episode_number
                           )
                         }
-                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all ${
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
                           isWatched
-                            ? "bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/30 scale-105"
-                            : "bg-zinc-800/90 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100 border border-zinc-700/60"
+                            ? "bg-gradient-to-r from-amber-400 to-amber-300 text-zinc-950 shadow-md shadow-amber-500/25 scale-105 font-bold"
+                            : "bg-zinc-800/90 text-zinc-400 hover:bg-zinc-750 hover:text-zinc-100 border border-zinc-700/60"
                         }`}
                         title={isWatched ? "Mark unwatched" : "Mark watched"}
                       >

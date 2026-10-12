@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import React, { useRef } from "react";
+import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
 import type { AppMode } from "../types";
 
 interface DatePickerPopoverProps {
@@ -36,88 +36,37 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
   appMode = "cinema",
   verb,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
+  const inputRef = useRef<HTMLInputElement>(null);
   const actionVerb = verb || (appMode === "gaming" ? "Played" : "Watched");
-
-  // Parse current value or fallback to today
-  const selectedDate = value || getTodayString();
-  const [selectedY, selectedM, selectedD] = selectedDate.split("-").map(Number);
-
-  // Month navigation state
-  const [viewYear, setViewYear] = useState<number>(selectedY || new Date().getFullYear());
-  const [viewMonth, setViewMonth] = useState<number>(
-    selectedM !== undefined ? selectedM - 1 : new Date().getMonth()
-  );
-
-  // Sync view when opened
-  useEffect(() => {
-    if (isOpen && value) {
-      const [y, m] = value.split("-").map(Number);
-      if (y && m) {
-        setViewYear(y);
-        setViewMonth(m - 1);
-      }
-    }
-  }, [isOpen, value]);
-
-  // Click outside to close
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isOpen]);
 
   const todayStr = getTodayString();
   const yesterdayStr = getYesterdayString();
+  const currentDateValue = value || todayStr;
 
-  const handlePrevMonth = () => {
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear(viewYear - 1);
-    } else {
-      setViewMonth(viewMonth - 1);
+  const openPicker = () => {
+    if (inputRef.current) {
+      if (typeof inputRef.current.showPicker === "function") {
+        try {
+          inputRef.current.showPicker();
+          return;
+        } catch {
+          // fallback to click
+        }
+      }
+      try {
+        inputRef.current.click();
+      } catch {
+        // focus fallback
+        inputRef.current.focus();
+      }
     }
   };
 
-  const handleNextMonth = () => {
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear(viewYear + 1);
-    } else {
-      setViewMonth(viewMonth + 1);
+  // Format human-readable date label
+  const getDisplayLabel = () => {
+    if (!value) {
+      return compact ? "Today" : `${actionVerb} Today`;
     }
-  };
-
-  // Generate days for the month
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay(); // 0 = Sunday
-
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-
-  const handleSelectDay = (day: number) => {
-    const mm = String(viewMonth + 1).padStart(2, "0");
-    const dd = String(day).padStart(2, "0");
-    const dateStr = `${viewYear}-${mm}-${dd}`;
-    if (maxDate && dateStr > maxDate) return;
-    onChange(dateStr);
-    setIsOpen(false);
-  };
-
-  // Format label for button
-  const getButtonLabel = () => {
     if (value === todayStr) {
       return compact ? "Today" : `${actionVerb} Today`;
     }
@@ -125,152 +74,118 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
       return compact ? "Yesterday" : `${actionVerb} Yesterday`;
     }
     try {
-      const [y, m, d] = value.split("-").map(Number);
-      if (y && m && d) {
-        const dt = new Date(y, m - 1, d);
-        if (compact) {
-          return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-        }
-        return `${actionVerb} ${dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+      const parts = value.split("-").map(Number);
+      if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+        const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+        const formatted = dt.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+        return compact ? formatted : `${actionVerb} ${formatted}`;
       }
     } catch {
-      // fallback
+      // Fallback
     }
     return compact ? value : `${actionVerb} ${value}`;
   };
 
+  const isCustomDate = value && value !== todayStr && value !== yesterdayStr;
+
+  // COMPACT MODE: (used in timeline cards & dense lists)
+  if (compact) {
+    return (
+      <div
+        className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 hover:border-amber-500/50 shadow-xs transition-all cursor-pointer group select-none"
+        title="Change date with native calendar"
+        onClick={openPicker}
+      >
+        <CalendarIcon className="w-3 h-3 text-amber-400 shrink-0 group-hover:scale-105 transition-transform" />
+        <span className="pointer-events-none">{getDisplayLabel()}</span>
+        <ChevronDown className="w-2.5 h-2.5 text-zinc-500 group-hover:text-zinc-300 transition-colors pointer-events-none" />
+
+        {/* Native HTML5 date input - overlays container directly */}
+        <input
+          ref={inputRef}
+          type="date"
+          value={currentDateValue}
+          max={maxDate}
+          style={{ colorScheme: "dark" }}
+          onChange={(e) => {
+            if (e.target.value) {
+              onChange(e.target.value);
+            }
+          }}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          aria-label="Pick date"
+          title="Click to select date"
+        />
+      </div>
+    );
+  }
+
+  // STANDARD MODE: (used in Rate & Mark Watched / Played Modal)
   return (
-    <div ref={containerRef} className="relative inline-block text-left">
-      {/* Simple Button with Calendar Icon */}
+    <div className="flex items-center gap-2 flex-wrap justify-center">
+      {/* Quick 1-Tap "Today" Pill */}
       <button
         type="button"
-        id="watched-date-picker-button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-xs border ${
-          compact
-            ? "px-2 py-0.5 rounded-lg text-[10.5px] font-medium bg-zinc-950/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800/80 hover:border-zinc-700"
-            : "px-3.5 py-1.5 rounded-full text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800 hover:border-zinc-700"
-        } ${
-          isOpen
-            ? "bg-zinc-800 text-white border-amber-500/60 ring-2 ring-amber-500/20"
-            : ""
+        onClick={() => onChange(todayStr)}
+        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
+          value === todayStr
+            ? "bg-gradient-to-r from-amber-400 to-amber-300 text-zinc-950 font-bold border-amber-400 shadow-sm shadow-amber-500/20"
+            : "bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border-zinc-800 hover:border-zinc-700"
         }`}
-        title="Click to select watched date"
+        title="Mark as Today"
       >
-        <CalendarIcon className={`${compact ? "w-3 h-3" : "w-3.5 h-3.5"} text-amber-400 shrink-0`} />
-        <span>{getButtonLabel()}</span>
+        Today
       </button>
 
-      {/* Floating Mini Calendar Popover */}
-      {isOpen && (
-        <div
-          className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 w-64 bg-zinc-950 border border-zinc-800 rounded-2xl p-3 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
-          style={{ maxWidth: "calc(100vw - 32px)" }}
-        >
-          {/* Quick Preset Buttons */}
-          <div className="flex items-center gap-1.5 mb-2.5 pb-2 border-b border-zinc-800/80">
-            <button
-              type="button"
-              onClick={() => {
-                onChange(todayStr);
-                setIsOpen(false);
-              }}
-              className={`flex-1 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                value === todayStr
-                  ? "bg-amber-500 text-zinc-950 font-bold"
-                  : "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
-              }`}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onChange(yesterdayStr);
-                setIsOpen(false);
-              }}
-              className={`flex-1 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                value === yesterdayStr
-                  ? "bg-amber-500 text-zinc-950 font-bold"
-                  : "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
-              }`}
-            >
-              Yesterday
-            </button>
-          </div>
+      {/* Quick 1-Tap "Yesterday" Pill */}
+      <button
+        type="button"
+        onClick={() => onChange(yesterdayStr)}
+        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
+          value === yesterdayStr
+            ? "bg-gradient-to-r from-amber-400 to-amber-300 text-zinc-950 font-bold border-amber-400 shadow-sm shadow-amber-500/20"
+            : "bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border-zinc-800 hover:border-zinc-700"
+        }`}
+        title="Mark as Yesterday"
+      >
+        Yesterday
+      </button>
 
-          {/* Month & Year Navigation Header */}
-          <div className="flex items-center justify-between mb-2 px-1">
-            <button
-              type="button"
-              onClick={handlePrevMonth}
-              className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-              title="Previous Month"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-xs font-bold text-zinc-200">
-              {monthNames[viewMonth]} {viewYear}
-            </span>
-            <button
-              type="button"
-              onClick={handleNextMonth}
-              className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-              title="Next Month"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+      {/* Native Calendar Button: Triggers native Windows & Android calendar picker */}
+      <div
+        onClick={openPicker}
+        className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border shadow-xs group select-none ${
+          isCustomDate
+            ? "bg-gradient-to-r from-amber-500/15 to-yellow-500/10 text-amber-200 border-amber-500/40 ring-1 ring-amber-500/30 font-bold"
+            : "bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border-zinc-800 hover:border-zinc-700"
+        }`}
+        title="Open native calendar (Windows & Android)"
+      >
+        <CalendarIcon className="w-3.5 h-3.5 text-amber-400 shrink-0 group-hover:scale-110 transition-transform pointer-events-none" />
+        <span className="pointer-events-none">{isCustomDate ? getDisplayLabel() : "Other Date"}</span>
+        <ChevronDown className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300 transition-colors ml-0.5 pointer-events-none" />
 
-          {/* Days of Week Header */}
-          <div className="grid grid-cols-7 gap-1 text-center mb-1">
-            {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((dayName) => (
-              <span key={dayName} className="text-[10px] font-bold text-zinc-500">
-                {dayName}
-              </span>
-            ))}
-          </div>
-
-          {/* Calendar Day Grid */}
-          <div className="grid grid-cols-7 gap-1 text-center">
-            {/* Empty slots before first day */}
-            {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-              <div key={`empty-${i}`} className="w-7 h-7" />
-            ))}
-
-            {/* Days of month */}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const day = i + 1;
-              const mm = String(viewMonth + 1).padStart(2, "0");
-              const dd = String(day).padStart(2, "0");
-              const currentDayStr = `${viewYear}-${mm}-${dd}`;
-              const isSelected = value === currentDayStr;
-              const isToday = currentDayStr === todayStr;
-              const isFuture = Boolean(maxDate && currentDayStr > maxDate);
-
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  disabled={isFuture}
-                  onClick={() => handleSelectDay(day)}
-                  className={`w-7 h-7 rounded-lg text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
-                    isFuture
-                      ? "text-zinc-700 opacity-40 cursor-not-allowed"
-                      : isSelected
-                      ? "bg-amber-500 text-zinc-950 font-bold shadow-md shadow-amber-500/20 scale-105"
-                      : isToday
-                      ? "bg-zinc-800 text-amber-300 hover:bg-zinc-700 font-bold border border-amber-500/30"
-                      : "text-zinc-300 hover:bg-zinc-800/90 hover:text-white"
-                  }`}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+        {/* Native date input overlay with full-size picker indicator */}
+        <input
+          ref={inputRef}
+          type="date"
+          value={currentDateValue}
+          max={maxDate}
+          style={{ colorScheme: "dark" }}
+          onChange={(e) => {
+            if (e.target.value) {
+              onChange(e.target.value);
+            }
+          }}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          aria-label="Pick date"
+          title="Open native calendar"
+        />
+      </div>
     </div>
   );
 };

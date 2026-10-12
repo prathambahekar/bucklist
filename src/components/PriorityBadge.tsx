@@ -106,7 +106,7 @@ export function PriorityBadge({
           onClick={(e) => e.stopPropagation()}
           className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1.5 z-[100] w-52 bg-zinc-950/98 backdrop-blur-md border border-zinc-750/90 rounded-xl p-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
         >
-          <div className="px-2 py-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-800/80 mb-1">
+          <div className="px-2 py-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
             Priority Tier
           </div>
 

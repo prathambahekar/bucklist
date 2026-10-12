@@ -25,8 +25,6 @@ import {
   resetAllLocalData,
   getLocalBlendEnabled,
   saveLocalBlendEnabled,
-  getLocalCollectionsEnabled,
-  saveLocalCollectionsEnabled,
 } from "../lib/storage";
 import type { TvProgressMap } from "../lib/storage";
 import type { ImportValidationResult, WatchlistMovie } from "../types";
@@ -38,8 +36,6 @@ interface SettingsViewProps {
   tvProgressMap: TvProgressMap;
   blendEnabled: boolean;
   onToggleBlend: (enabled: boolean) => void;
-  collectionsEnabled: boolean;
-  onToggleCollections: (enabled: boolean) => void;
   onDataUpdated: () => void;
   onNavigateToWatchlist?: () => void;
 }
@@ -50,8 +46,6 @@ export function SettingsView({
   tvProgressMap,
   blendEnabled,
   onToggleBlend,
-  collectionsEnabled,
-  onToggleCollections,
   onDataUpdated,
   onNavigateToWatchlist,
 }: SettingsViewProps) {
@@ -309,50 +303,6 @@ export function SettingsView({
                 />
               </button>
             </div>
-
-            {/* Collections Toggle Row */}
-            <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-2xl p-3.5 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-amber-400 shrink-0">
-                  <Layers className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-xs sm:text-sm font-bold text-zinc-100 truncate">
-                      Franchises & Collections
-                    </h3>
-                    <span className="text-[9px] bg-zinc-800 text-zinc-300 font-bold px-1.5 py-0.2 rounded-full border border-zinc-700 font-mono">
-                      FEATURE
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 leading-snug mt-0.5">
-                    Enable sagas, movie universes, and custom list curation in the Watched tab
-                  </p>
-                </div>
-              </div>
-
-              {/* Toggle Switch */}
-              <button
-                id="toggle-collections-feature-btn"
-                type="button"
-                role="switch"
-                aria-checked={collectionsEnabled}
-                onClick={() => {
-                  const newVal = !collectionsEnabled;
-                  saveLocalCollectionsEnabled(newVal);
-                  onToggleCollections(newVal);
-                }}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  collectionsEnabled ? "bg-amber-400" : "bg-zinc-800"
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-zinc-950 shadow-md ring-0 transition duration-200 ease-in-out ${
-                    collectionsEnabled ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -540,7 +490,7 @@ export function SettingsView({
             )}
 
             {/* Bottom Row: Reset All Data Trigger */}
-            <div className="pt-2 border-t border-zinc-800/80">
+            <div className="pt-2">
               <button
                 id="settings-reset-all-row-btn"
                 type="button"

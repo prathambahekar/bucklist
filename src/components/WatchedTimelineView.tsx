@@ -412,7 +412,7 @@ export function WatchedTimelineView({
                                   e.stopPropagation();
                                   onRateClick(item, item.rating || 5);
                                 }}
-                                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-zinc-950 text-xs font-bold transition-colors cursor-pointer shrink-0"
+                                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gradient-to-r from-amber-500/15 to-yellow-500/10 hover:from-amber-500/25 hover:to-yellow-500/20 text-amber-200 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer shrink-0 shadow-2xs"
                                 title="Click to edit rating"
                               >
                                 <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
@@ -422,24 +422,22 @@ export function WatchedTimelineView({
 
                             {/* Row 2: Metadata (Media Type, Year, OTT Platforms) */}
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap text-xs text-zinc-400">
-                              <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 font-semibold text-[10px]">
-                                {isAnime ? (
-                                  <>
-                                    <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                                    <span>Anime</span>
-                                  </>
-                                ) : isTv ? (
-                                  <>
-                                    <Tv className="w-2.5 h-2.5 text-blue-400" />
-                                    <span>Series</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Film className="w-2.5 h-2.5 text-emerald-400" />
-                                    <span>Movie</span>
-                                  </>
-                                )}
-                              </span>
+                              {isAnime ? (
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-purple-500/15 to-pink-500/10 text-purple-200 border border-purple-400/30 font-semibold text-[10px] shadow-2xs">
+                                  <Sparkles className="w-2.5 h-2.5 text-purple-300" />
+                                  <span>Anime</span>
+                                </span>
+                              ) : isTv ? (
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/15 to-indigo-500/10 text-blue-200 border border-blue-400/30 font-semibold text-[10px] shadow-2xs">
+                                  <Tv className="w-2.5 h-2.5 text-blue-300" />
+                                  <span>Series</span>
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-zinc-800/80 to-zinc-850/80 text-zinc-200 border border-zinc-700/60 font-semibold text-[10px] shadow-2xs">
+                                  <Film className="w-2.5 h-2.5 text-zinc-400" />
+                                  <span>Movie</span>
+                                </span>
+                              )}
 
                               {item.release_year && (
                                 <span className="text-zinc-400 font-medium">{item.release_year}</span>
@@ -465,7 +463,7 @@ export function WatchedTimelineView({
 
                           {/* Row 3: Watched Date + TV episodes + Quick Actions */}
                           <div
-                            className="pt-2 mt-2 border-t border-zinc-800/60 flex items-center justify-between gap-2"
+                            className="pt-1.5 mt-2 flex items-center justify-between gap-2"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <div className="flex items-center gap-2">
@@ -583,7 +581,7 @@ export function WatchedTimelineView({
                         className="group bg-zinc-900/90 hover:bg-zinc-900 border border-zinc-800/80 hover:border-amber-500/35 rounded-xl p-2.5 flex items-center gap-2.5 transition-all duration-150 shadow-2xs hover:shadow-md cursor-pointer relative"
                       >
                         {/* Mobile Thumbnail */}
-                        <div className="w-12 h-17 rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-xs border border-zinc-800/80 relative">
+                        <div className="w-13 aspect-[2/3] rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-xs border border-zinc-800/80 relative">
                           <img
                             src={
                               poster ||
@@ -612,7 +610,7 @@ export function WatchedTimelineView({
                                 e.stopPropagation();
                                 onRateClick(item, item.rating || 5);
                               }}
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/25 text-[11px] font-bold transition-colors cursor-pointer shrink-0 -mt-0.5"
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gradient-to-r from-amber-500/15 to-yellow-500/10 hover:from-amber-500/25 hover:to-yellow-500/20 text-amber-200 border border-amber-500/30 text-[11px] font-bold transition-all cursor-pointer shrink-0 -mt-0.5 shadow-2xs"
                               title="Click to edit rating"
                             >
                               <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
@@ -623,13 +621,19 @@ export function WatchedTimelineView({
                           {/* Row 2: Metadata (Media Type, Year, OTT Badge, Episode tracker) */}
                           <div className="flex items-center gap-1.5 text-xs flex-wrap">
                             {isAnime ? (
-                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0 flex items-center gap-0.5">
-                                <Sparkles className="w-2.5 h-2.5" />
+                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-purple-500/15 to-pink-500/10 text-purple-200 border border-purple-400/30 shrink-0 flex items-center gap-0.5 shadow-2xs">
+                                <Sparkles className="w-2.5 h-2.5 text-purple-300" />
                                 <span>Anime</span>
                               </span>
+                            ) : isTv ? (
+                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/15 to-indigo-500/10 text-blue-200 border border-blue-400/30 shrink-0 flex items-center gap-0.5 shadow-2xs">
+                                <Tv className="w-2.5 h-2.5 text-blue-300" />
+                                <span>Series</span>
+                              </span>
                             ) : (
-                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0">
-                                {isTv ? "TV" : "Movie"}
+                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-md bg-gradient-to-r from-zinc-800/80 to-zinc-850/80 text-zinc-200 border border-zinc-700/60 shrink-0 flex items-center gap-0.5 shadow-2xs">
+                                <Film className="w-2.5 h-2.5 text-zinc-400" />
+                                <span>Movie</span>
                               </span>
                             )}
 
@@ -661,7 +665,7 @@ export function WatchedTimelineView({
 
                           {/* Row 3: Watched Date + Quick Actions */}
                           <div
-                            className="flex items-center justify-between gap-1.5 pt-1 border-t border-zinc-800/60"
+                            className="flex items-center justify-between gap-1.5 pt-1.5 mt-1"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <DatePickerPopover

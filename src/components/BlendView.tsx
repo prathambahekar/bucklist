@@ -636,7 +636,7 @@ export function BlendView({
 
                         {/* Watched Together Ratings */}
                         {movie.watchedTogether && (
-                          <div className="mt-2 pt-1.5 border-t border-zinc-800/80 space-y-1">
+                          <div className="mt-2 pt-1 space-y-1">
                             <div className="flex items-center justify-between text-[11px]">
                               <span className="text-zinc-400">
                                 Watched: {movie.watchedDate || "Recently"}
@@ -667,7 +667,7 @@ export function BlendView({
                       </div>
 
                       {/* Bottom Action Row */}
-                      <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-zinc-800/60">
+                      <div className="flex items-center justify-between gap-2 mt-2 pt-1">
                         <button
                           type="button"
                           onClick={() => handleToggleWantToWatch(movie.id)}

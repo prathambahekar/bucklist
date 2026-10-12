@@ -142,14 +142,14 @@ export function SwipeableMovieCard({
     <div
       ref={containerRef}
       id={id}
-      className={`relative overflow-hidden rounded-2xl select-none ${className}`}
+      className={`relative overflow-hidden rounded-xl select-none ${className}`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchCancel}
     >
       {/* Background action reveal under card */}
-      <div className="absolute inset-0 flex items-center justify-between pointer-events-none rounded-2xl">
+      <div className="absolute inset-0 flex items-center justify-between pointer-events-none rounded-xl">
         {/* Left/Right Background container: Green/Amber on swipe right */}
         {isRightSwipe && (
           <div

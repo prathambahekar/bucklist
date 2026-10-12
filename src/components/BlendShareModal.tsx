@@ -287,7 +287,7 @@ export function BlendShareModal({
               })}
             </div>
 
-            <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-2">
+            <div className="pt-2 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setTab("direct")}

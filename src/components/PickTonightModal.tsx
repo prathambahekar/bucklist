@@ -99,7 +99,7 @@ export function PickTonightModal({
         </button>
 
         {/* Modal Top Header */}
-        <div className="p-4 sm:p-5 border-b border-zinc-800/80 bg-zinc-900/60">
+        <div className="p-4 sm:p-5 bg-zinc-900/60">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-400">
               <Sparkles className="w-4 h-4" />
@@ -275,7 +275,7 @@ export function PickTonightModal({
             </div>
 
             {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-2.5 pt-1 border-t border-zinc-800/80">
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => doPick()}

@@ -88,7 +88,7 @@ export function AddMovieToBlendModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-zinc-800/80 shrink-0">
+        <div className="p-4 sm:p-5 pb-3 shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200">

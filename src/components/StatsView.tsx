@@ -351,7 +351,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {/* Chart 1: Media Format Donut */}
             <div className="bg-[#18181b] border border-zinc-800/90 rounded-2xl p-3 sm:p-3.5 shadow-md space-y-2">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-1.5">
+              <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-1.5">
                   <Film className="w-3.5 h-3.5 text-amber-400" />
                   <h3 className="text-xs font-bold text-zinc-200">
@@ -434,9 +434,9 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
             {/* Chart 2: Top Rated Genres */}
             <div className="bg-[#18181b] border border-zinc-800/90 rounded-2xl p-3 sm:p-3.5 shadow-md space-y-2">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-1.5">
+              <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-1.5">
-                  <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                   <h3 className="text-xs font-bold text-zinc-200">
                     Top-Rated Genres
                   </h3>
@@ -480,7 +480,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {/* Most Watched Genres */}
             <div className="bg-[#18181b] border border-zinc-800/90 rounded-2xl p-3 sm:p-3.5 shadow-md space-y-2">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-1.5">
+              <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-1.5">
                   <Flame className="w-3.5 h-3.5 text-orange-400" />
                   <h3 className="text-xs font-bold text-zinc-200">
@@ -523,7 +523,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
             {/* Ratings Histogram */}
             <div className="bg-[#18181b] border border-zinc-800/90 rounded-2xl p-3 sm:p-3.5 shadow-md space-y-2">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-1.5">
+              <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                   <h3 className="text-xs font-bold text-zinc-200">

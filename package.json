@@ -16,6 +16,7 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.2",
+    "firebase": "^12.19.0",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
